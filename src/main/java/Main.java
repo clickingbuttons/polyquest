@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 
 public class Main {
     final static Logger logger = LogManager.getLogger(Main.class);
-    final static int threadCount = 100;
+    final static int threadCount = 200;
     final static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
     final static PolygonClient client = new PolygonClient();
 
@@ -200,6 +200,16 @@ public class Main {
             return false;
         }
 
+        // Hurricane Sandy
+        Calendar hurricaneSandy = new GregorianCalendar(2012, Calendar.OCTOBER, 29);
+        if (date.compareTo(hurricaneSandy) == 0) {
+            return false;
+        }
+
+        Calendar hurricaneSandy2 = new GregorianCalendar(2012, Calendar.OCTOBER, 30);
+        if (date.compareTo(hurricaneSandy2) == 0) {
+            return false;
+        }
         return true;
     }
 
@@ -252,12 +262,14 @@ public class Main {
     }
 
     public static void main(String args[]) {
+        initTables();
+
         Calendar from = Calendar.getInstance();
         Calendar to = Calendar.getInstance();
         try {
-            Date fromDate = QuestDBReader.getLastTrade();
+            Date fromDate = QuestDBReader.getLastTrade().getTime();
             QuestDBReader.close();
-            Date toDate = sdf.parse("2011-01-01");
+            Date toDate = sdf.parse("2020-01-01");
 
             from.setTime(fromDate);
             to.setTime(toDate);
@@ -267,7 +279,6 @@ public class Main {
         }
 
         long startTime = System.currentTimeMillis();
-        initTables();
         backfill(from, to);
         QuestDBWriter.close();
         long duration = (System.currentTimeMillis() - startTime);

@@ -11,8 +11,7 @@ compileJava {
     options.compilerArgs << '-Xlint:unchecked'
 }
 
-// We allocate and then set to null a lot of memory
-applicationDefaultJvmArgs = ["-Xms4G", "-Xmx8G"]
+applicationDefaultJvmArgs = ["-Xms4G", "-Xmx32G"]
 
 repositories {
     mavenCentral()

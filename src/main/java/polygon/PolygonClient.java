@@ -3,12 +3,14 @@ package polygon;
 import com.google.common.util.concurrent.RateLimiter;
 import polygon.models.OHLCV;
 import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
 import polygon.models.Trade;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import polygon.models.*;
 
 import java.io.BufferedReader;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.*;
@@ -53,8 +55,7 @@ public class PolygonClient {
                 Thread.sleep((i + 1) * (i + 1) * 1000);
             } catch (SocketTimeoutException e) {
                 logger.debug("{} timeout", uri);
-            }
-            catch (MalformedURLException|ProtocolException|InterruptedException e) {
+            } catch (MalformedURLException|ProtocolException|InterruptedException|JsonSyntaxException e) {
                 logger.error("{} {}", uri, e);
             } catch (IOException e) {
                 if (!e.getMessage().contains("500")) {
@@ -129,7 +130,7 @@ public class PolygonClient {
         for (int page = 1;; page++) {
             String url = String.format("%s/reference/tickers?apiKey=%s&sort=ticker&market=stocks&perpage=%d&page=%d",
                     baseUrl, apiKey, perPage, page);
-//            logger.debug(url);
+            logger.info("Downloading tickers {} / 24807+", page * 50);
             String content = doRequest(url);
             if (content == null)
                 return null;

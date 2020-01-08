@@ -10,6 +10,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import polygon.models.Trade;
 
+import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.SortedSet;
@@ -23,7 +24,7 @@ public class QuestDBReader {
     private final static CairoEngine engine =  new CairoEngine(configuration);
     private final static AllowAllSecurityContextFactory securityContextFactor = new AllowAllSecurityContextFactory();
 
-    public static Date getLastTrade() {
+    public static Calendar getLastTrade() {
         long timestamp = 1262304000000000L;
 
         try (SqlCompiler compiler = new SqlCompiler(engine)) {
@@ -32,11 +33,17 @@ public class QuestDBReader {
             if (cursor.hasNext())
                 timestamp = cursor.getRecord().getLong(0);
         } catch (SqlException e) {
-            e.printStackTrace();
+            logger.debug(e);
         }
 
-        // UTC is 5 hours ahead
-        return new Date(timestamp / 1000 + 19 * 60 * 60 * 1000);
+        Calendar res = Calendar.getInstance();
+        // UTC is 5 hours ahead of EST
+        res.setTime(new Date(timestamp / 1000 + 19 * 60 * 60 * 1000));
+        res.set(Calendar.HOUR_OF_DAY, 0);
+        res.set(Calendar.MINUTE, 0);
+        res.set(Calendar.SECOND, 0);
+        res.set(Calendar.MILLISECOND, 0);
+        return res;
     }
 
     public static void close() {
