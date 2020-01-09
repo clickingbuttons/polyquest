@@ -47,8 +47,8 @@ public class BackfillSymbolTask implements Runnable {
             trades.clear();
         }
 
-        int num = stats.curNumSymbols.getAndIncrement();
-        if (num % 500 == 0 || num == stats.numSymbols - 1) {
+        int num = stats.curNumSymbols.incrementAndGet();
+        if (num % 500 == 0 || num == stats.numSymbols) {
             logger.info("{}: {} / {} ({} w/trades)",
                     sdf.format(day.getTime()), num, stats.numSymbols, stats.symbolsWithTrades.size());
         }

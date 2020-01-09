@@ -23,17 +23,14 @@ public class QuestDBReader {
     );
     private final static CairoEngine engine =  new CairoEngine(configuration);
     private final static AllowAllSecurityContextFactory securityContextFactor = new AllowAllSecurityContextFactory();
+    private final static CairoSecurityContext cairoSecurityContext = securityContextFactor.getInstance("admin");
 
     public static Calendar getLastTrade() {
         long timestamp = 1262304000000000L;
 
-        try (SqlCompiler compiler = new SqlCompiler(engine)) {
-            String query = "SELECT ts FROM trades LIMIT -1";
-            RecordCursor cursor = compiler.compile(query).getRecordCursorFactory().getCursor();
-            if (cursor.hasNext())
-                timestamp = cursor.getRecord().getLong(0);
-        } catch (SqlException e) {
-            logger.debug(e);
+        TableReader reader = engine.getReader(cairoSecurityContext, "trades");
+        if (reader != null) {
+            timestamp = reader.getMaxTimestamp();
         }
 
         Calendar res = Calendar.getInstance();

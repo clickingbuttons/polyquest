@@ -55,7 +55,7 @@ public class PolygonClient {
                 Thread.sleep((i + 1) * (i + 1) * 1000);
             } catch (SocketTimeoutException e) {
                 logger.debug("{} timeout", uri);
-            } catch (MalformedURLException|ProtocolException|InterruptedException|JsonSyntaxException e) {
+            } catch (MalformedURLException|ProtocolException|InterruptedException e) {
                 logger.error("{} {}", uri, e);
             } catch (IOException e) {
                 if (!e.getMessage().contains("500")) {
@@ -85,9 +85,9 @@ public class PolygonClient {
                     return trades;
                 offset = trades.get(trades.size() - 1).timeNanos;
             }
-            catch (Exception e) {
+            catch (JsonSyntaxException e) {
+                // Happens about once every 5 months that we get incomplete response
                 logger.error(e);
-                System.exit(3);
             }
         }
     }
