@@ -29,7 +29,7 @@ public class PolygonClient {
 
     private static String doRequest(String uri) {
         StringBuffer content;
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 15; i++) {
             try {
                 rateLimiter.acquire();
                 URL url = new URL(uri);
@@ -52,7 +52,7 @@ public class PolygonClient {
                 int code = con.getResponseCode();
                 if (code == 200)
                     return content.toString();
-                Thread.sleep((i + 1) * (i + 1) * 1000);
+                Thread.sleep((i + 1) * (i + 1) * 100);
             } catch (SocketTimeoutException e) {
                 logger.debug("{} timeout", uri);
             } catch (MalformedURLException|ProtocolException|InterruptedException e) {
@@ -65,6 +65,7 @@ public class PolygonClient {
         }
 
         logger.error("Retries exceeded for request {}", uri);
+        System.exit(2);
         return null;
     }
 

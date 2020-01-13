@@ -33,8 +33,11 @@ public class BackfillSymbolTask implements Runnable {
         if (numTrades > 0) {
             stats.symbolsWithTrades.add(symbol);
             logger.debug("{} {} had {} trades from {} to {}",
-                    sdf.format(day.getTime()), symbol, numTrades,
-                    trades.get(0).timeNanos, trades.get(trades.size() - 1).timeNanos);
+                    sdf.format(day.getTime()),
+                    symbol,
+                    numTrades,
+                    trades.get(0).timeNanos / 1000,
+                    trades.get(trades.size() - 1).timeNanos / 1000);
 
 //            OHLCV candle1d = TradeAggregator.aggregateDay(trades, day);
 //            List<OHLCV> candles1s = TradeAggregator.aggregate(trades, 1000);

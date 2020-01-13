@@ -210,6 +210,13 @@ public class Main {
         if (date.compareTo(hurricaneSandy2) == 0) {
             return false;
         }
+
+        // George H.W. Bush death
+        Calendar deadAt94 = new GregorianCalendar(2018, Calendar.DECEMBER, 05);
+        if (date.compareTo(deadAt94) == 0) {
+            return false;
+	}
+
         return true;
     }
 
