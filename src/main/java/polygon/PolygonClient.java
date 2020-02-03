@@ -131,14 +131,12 @@ public class PolygonClient {
         for (int page = 1;; page++) {
             String url = String.format("%s/reference/tickers?apiKey=%s&sort=ticker&market=stocks&perpage=%d&page=%d",
                     baseUrl, apiKey, perPage, page);
-            logger.info("Downloading tickers {} / 24807+", page * 50);
+            logger.info("Downloading tickers {} / 34502+", (page - 1) * 50);
             String content = doRequest(url);
             if (content == null)
                 return null;
             TickerResponse r = gson.fromJson(content, TickerResponse.class);
-            for (Ticker s : r.tickers) {
-                tickers.add(s);
-            }
+            tickers.addAll(r.tickers);
 
             if (r.tickers.size() < perPage) // Last page
                 return tickers;

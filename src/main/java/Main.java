@@ -17,11 +17,11 @@ import java.util.stream.Collectors;
 
 public class Main {
     final static Logger logger = LogManager.getLogger(Main.class);
-    final static int threadCount = 200;
     final static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
     final static PolygonClient client = new PolygonClient();
+    final static String tableName = "trades2";
 
-    static BackfillDayStats backfillDay(Calendar day, List<String> tickerStrings) {
+    static BackfillDayStats backfillDay(Calendar day, List<String> tickerStrings, int threadCount) {
         BackfillDayStats res = new BackfillDayStats(day, tickerStrings.size());
         List<Runnable> tasks = new ArrayList<>();
 
@@ -29,9 +29,8 @@ public class Main {
             tasks.add(new BackfillSymbolTask(day, ticker, res));
         }
 
-        // Only about 1/4 of 33137 symbols have trades and will actually use CPU,
-        // and the rest are just doing HTTP requests to check that there aren't any
-        // trades on that day.
+        // Only about 1/4 of 33676 symbols have trades.
+        // The rest are just doing HTTP requests to check that there aren't any trades on that day.
         ExecutorService pool = Executors.newFixedThreadPool(threadCount);
         for (Runnable r : tasks) {
             pool.execute(r);
@@ -44,7 +43,7 @@ public class Main {
             e.printStackTrace();
         }
         long startTime = System.currentTimeMillis();
-        QuestDBWriter.flushTrades();
+        QuestDBWriter.flushTrades(tableName);
         logger.info("Flushed in {}s", (System.currentTimeMillis() - startTime) /1000 );
 
         return res;
@@ -221,7 +220,7 @@ public class Main {
     }
 
     private static void initTables() {
-        QuestDBWriter.createTable("trades", "DAY");
+        QuestDBWriter.createTable(tableName, "DAY");
 //        QuestDBWriter.createTable("agg1s", "DAY");
 //        QuestDBWriter.createTable("agg1m", "DAY");
 //        QuestDBWriter.createTable("agg5m", "DAY");
@@ -229,7 +228,7 @@ public class Main {
 //        QuestDBWriter.createTable("agg1d", "NONE");
     }
 
-    private static void backfill(Calendar from, Calendar to) {
+    private static void backfill(Calendar from, Calendar to, int threadCount) {
         logger.info("Loading tickers...");
         List<Ticker> tickers;
         try {
@@ -249,17 +248,33 @@ public class Main {
         List<String> tickerStrings = tickers
                 .stream()
                 .map(ticker -> ticker.ticker)
+                .sorted()
                 .collect(Collectors.toList());
 
+        String lastTicker = "";
+        for (String ticker : tickerStrings) {
+            if (lastTicker.compareTo(ticker) == 0) {
+                System.err.println("Duplicate ticker: " + ticker);
+                System.err.println("Delete tickers.bin and fix duplicate tickers");
+                System.exit(1);
+            }
+            if (ticker.isEmpty() || ticker == null) {
+                System.err.println("Empty ticker: " + ticker);
+                System.err.println("Delete tickers.bin and fix duplicate tickers");
+                System.exit(1);
+            }
+            lastTicker = ticker;
+        }
+
         BackfillAllStats allStats = new BackfillAllStats();
-        for (Calendar it = (Calendar) from.clone(); it.before(to); it.add(Calendar.DATE, 1)) {
-            if (!isMarketOpen((it)))
+        for (Calendar day = (Calendar) from.clone(); day.before(to); day.add(Calendar.DATE, 1)) {
+            if (!isMarketOpen(day))
                 continue;
             logger.info("Backfilling {} tickers on {} using {} threads",
-                    tickerStrings.size(), sdf.format(it.getTime()), threadCount);
+                    tickerStrings.size(), sdf.format(day.getTime()), threadCount);
 
             long startTime = System.currentTimeMillis();
-            BackfillDayStats dayStats = backfillDay(it, tickerStrings);
+            BackfillDayStats dayStats = backfillDay(day, tickerStrings, threadCount);
             dayStats.timeElapsed = System.currentTimeMillis() - startTime;
 
             allStats.add(dayStats);
@@ -271,25 +286,12 @@ public class Main {
     public static void main(String args[]) {
         initTables();
 
-        Calendar from = Calendar.getInstance();
-        Calendar to = Calendar.getInstance();
-        try {
-            Date fromDate = QuestDBReader.getLastTrade().getTime();
-            QuestDBReader.close();
-            Date toDate = sdf.parse("2020-01-01");
-
-            from.setTime(fromDate);
-            to.setTime(toDate);
-        } catch (ParseException e) {
-            e.printStackTrace();
-            System.exit(-1);
-        }
+        Calendar from = QuestDBReader.getLastTrade(tableName);
+        Calendar to = new GregorianCalendar(2010, Calendar.FEBRUARY, 1);;
 
         long startTime = System.currentTimeMillis();
-        backfill(from, to);
+        backfill(from, to, 200);
         QuestDBWriter.close();
-        long duration = (System.currentTimeMillis() - startTime);
-        logger.info("Took {} seconds", duration / 1000);
-        System.exit(0);
+        logger.info("Took {} seconds", System.currentTimeMillis() - startTime / 1000);
     }
 }

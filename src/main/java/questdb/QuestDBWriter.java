@@ -25,8 +25,8 @@ public class QuestDBWriter {
     public static void createTable(String tableName, String partitionType) {
         try (SqlCompiler compiler = new SqlCompiler(engine)) {
             String query = "CREATE TABLE %s (\n" +
-                    "    sym SYMBOL CACHE, \n" +
-                    "    price FLOAT, \n" +
+                    "    sym SYMBOL CACHE INDEX, \n" +
+                    "    price DOUBLE, \n" +
                     "    size INT, \n" +
                     "    conditions INT, \n" +
                     "    exchange BYTE, \n" +
@@ -34,21 +34,23 @@ public class QuestDBWriter {
                     ") TIMESTAMP(ts) PARTITION BY %s";
             if (tableName.contains("agg")) {
                 query = "CREATE TABLE %s (\n" +
-                        "    sym SYMBOL CACHE, \n" +
-                        "    open FLOAT, \n" +
-                        "    high FLOAT, \n" +
-                        "    low FLOAT, \n" +
-                        "    close FLOAT, \n" +
+                        "    sym SYMBOL CACHE INDEX, \n" +
+                        "    open DOUBLE, \n" +
+                        "    high DOUBLE, \n" +
+                        "    low DOUBLE, \n" +
+                        "    close DOUBLE, \n" +
                         "    volume INT, \n" +
                         "    ts TIMESTAMP\n" +
                         ") TIMESTAMP(ts) PARTITION BY %s";
             }
-            compiler.compile(String.format(query, tableName, partitionType));
+            String createTable = String.format(query, tableName, partitionType);
+            compiler.compile(createTable);
         } catch (SqlException e) {
             if (e.getMessage().contains("table already exists")) {
                 logger.info("Table {} already exists", tableName);
             } else {
                 e.printStackTrace();
+                System.exit(1);
             }
         }
     }
@@ -60,11 +62,11 @@ public class QuestDBWriter {
         writeCache.addAll(trades);
     }
 
-    public static void flushTrades() {
+    public static void flushTrades(String tableName) {
         logger.info("Flushing {} trades", writeCache.size());
-        try (TableWriter writer = engine.getWriter(cairoSecurityContext, "trades")) {
+        try (TableWriter writer = engine.getWriter(cairoSecurityContext, tableName)) {
             for (Trade t : writeCache) {
-                long microSeconds = t.getTimeMicros();
+                long microSeconds = t.getTimeMicros() - (5 * 60 * 60 * 1000000L);
                 TableWriter.Row row = writer.newRow(microSeconds);
                 row.putSym(0, t.ticker);
                 row.putFloat(1, t.price);

@@ -14,7 +14,7 @@ public class TickerCodes implements Serializable {
         this.cik = cik;
         this.figiuid = figiuid;
         this.scfigi = scfigi;
-        this.cfigi = scfigi;
+        this.cfigi = cfigi;
         this.figi = figi;
     }
 }

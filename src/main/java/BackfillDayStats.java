@@ -25,7 +25,7 @@ public class BackfillDayStats {
                 sdf.format(day.getTime()),
                 symbolsWithTrades.size(),
                 numSymbols,
-                curNumTrades.get()
+                curNumTrades.get(),
                 timeElapsed / 1000);
     }
 }
