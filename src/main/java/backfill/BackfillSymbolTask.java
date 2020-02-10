@@ -1,6 +1,5 @@
-import aggregators.OHLCVAggregator;
-import polygon.models.OHLCV;
-import aggregators.TradeAggregator;
+package backfill;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import polygon.models.Trade;

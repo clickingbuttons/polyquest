@@ -18,7 +18,7 @@ public class TradeAggregator {
 
         OHLCV curBucket = new OHLCV(trades.get(0).timeNanos / resolution * resolution);
         for (Trade t : trades) {
-            if (t.timeNanos / resolution > curBucket.timeMillis / resolution) {
+            if (t.timeNanos / resolution > curBucket.timeMicros / resolution) {
                 if (curBucket.open != 0) res.add(curBucket);
                 curBucket = new OHLCV(t.timeNanos / resolution * resolution);
             }

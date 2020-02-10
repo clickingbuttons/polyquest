@@ -9,11 +9,11 @@ public class OHLCVAggregator {
     public static List<OHLCV> aggregate(List<OHLCV> candles, int resolution) {
         List<OHLCV> res = new ArrayList<>();
         if (candles.size() > 0) {
-            OHLCV curBucket = new OHLCV(candles.get(0).timeMillis / resolution * resolution);
+            OHLCV curBucket = new OHLCV(candles.get(0).timeMicros / resolution * resolution);
             for (OHLCV c : candles) {
-                if (c.timeMillis / resolution > curBucket.timeMillis / resolution) {
+                if (c.timeMicros / resolution > curBucket.timeMicros / resolution) {
                     res.add(curBucket);
-                    curBucket = new OHLCV(c.timeMillis / resolution * resolution);
+                    curBucket = new OHLCV(c.timeMicros / resolution * resolution);
                 }
 
                 if (curBucket.open == 0)

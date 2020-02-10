@@ -1,9 +1,11 @@
+package backfill;
+
 import java.util.ArrayList;
 import java.util.List;
 
 public class BackfillAllStats {
-    int symbolTradeCount = 0;
-    int tradeCount = 0;
+    double symbolTradeCount = 0;
+    double tradeCount = 0;
     public List<Long> timesElapsed = new ArrayList<>();
 
     public void add(BackfillDayStats day) {
