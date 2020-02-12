@@ -12,7 +12,7 @@ public class Main {
         long startTime = System.currentTimeMillis();
         if (args[0].compareTo("backfill") == 0) {
             QuestDBWriter.createTable("trades", "DAY");
-            Calendar from = QuestDBReader.getLastTrade("trades");
+            Calendar from = QuestDBReader.getLastTimestamp("trades");
             Calendar to = new GregorianCalendar();
             to.add(-2, Calendar.DATE);
             BackfillTradeRange.backfill(from, to, 200);
@@ -25,8 +25,8 @@ public class Main {
             QuestDBWriter.createTable("agg1s", "DAY");
             QuestDBWriter.createTable("agg1m", "DAY");
             QuestDBWriter.createTable("agg1d", "YEAR");
-            Calendar from = QuestDBReader.getFirstTrade("trades");
-            Calendar to = QuestDBReader.getLastTrade("trades");
+            Calendar from = QuestDBReader.getLastTimestamp("agg1s");
+            Calendar to = QuestDBReader.getLastTimestamp("trades");
             AggregateTradeRange.aggregate(from, to, aggregationLevels);
         }
         QuestDBWriter.close();

@@ -4,17 +4,12 @@ import io.questdb.cairo.*;
 import io.questdb.cairo.security.AllowAllSecurityContextFactory;
 import io.questdb.cairo.sql.Record;
 import io.questdb.cairo.sql.RecordCursor;
-import io.questdb.griffin.CompiledQuery;
 import io.questdb.griffin.SqlCompiler;
 import io.questdb.griffin.SqlException;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import polygon.models.Trade;
 
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.concurrent.ConcurrentSkipListSet;
-import java.util.stream.Collectors;
 
 public class QuestDBReader {
     private final static CairoConfiguration configuration = new DefaultCairoConfiguration(
@@ -27,7 +22,7 @@ public class QuestDBReader {
     // Start of Polygon.io data
     private final static Calendar polygonStart = new GregorianCalendar(2010, Calendar.JANUARY, 1);
 
-    public static Calendar getLastTrade(String tableName) {
+    public static Calendar getLastTimestamp(String tableName) {
         Calendar res = (Calendar) polygonStart.clone();
 
         TableReader reader = engine.getReader(cairoSecurityContext, tableName);
@@ -45,7 +40,7 @@ public class QuestDBReader {
         return res;
     }
 
-    public static Calendar getFirstTrade(String tableName) {
+    public static Calendar getFirstTimestamp(String tableName) {
         Calendar res = (Calendar) polygonStart.clone();
 
         TableReader reader = engine.getReader(cairoSecurityContext, tableName);
@@ -81,7 +76,7 @@ public class QuestDBReader {
                 t.size = record.getInt(2);
                 t.decodeConditions(record.getInt(3));
                 t.exchange = record.getByte(4);
-                t.timeNanos = record.getTimestamp(5);
+                t.time = record.getTimestamp(5);
                 res.add(t);
             }
         } catch (SqlException e) {

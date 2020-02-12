@@ -7,8 +7,9 @@ import java.util.List;
 
 public class Trade implements Comparable<Trade> {
     public String ticker;
+    // Nanoseconds when downloaded from Polygon. Microseconds when loaded from QuestDB.
     @SerializedName("t")
-    public long timeNanos;
+    public long time;
     // Participant/Exchange timestamp
     @SerializedName("y")
     public long exchangeTimeNanos;
@@ -108,17 +109,17 @@ public class Trade implements Comparable<Trade> {
     }
 
     public long getTimeMicros() {
-        return (timeNanos + 500) / 1000;
+        return (time + 500) / 1000;
     }
 
     public String toString() {
-        return String.format("%d - %d @ %.3f", timeNanos, size, price);
+        return String.format("%d - %d @ %.3f", time, size, price);
     }
 
     @Override
     public int compareTo(Trade t2) {
         // Can't return 0 if equal because used in Set
-        if (t2.timeNanos >= timeNanos) {
+        if (t2.time >= time) {
             return -1;
         }
         return 1;

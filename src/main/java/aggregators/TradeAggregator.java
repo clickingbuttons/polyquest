@@ -16,11 +16,14 @@ public class TradeAggregator {
         List<OHLCV> res = new ArrayList<>();
         if (trades.size() == 0) return res;
 
-        OHLCV curBucket = new OHLCV(trades.get(0).timeNanos / resolution * resolution);
-        for (Trade t : trades) {
-            if (t.timeNanos / resolution > curBucket.timeMicros / resolution) {
+        OHLCV curBucket = new OHLCV(trades.get(trades.size() - 1).time / resolution * resolution);
+        // QuestDB gives us trades in reverse timestamp order when using `order by sym`...
+        // Writing aggregator for increasing timestamps is easier than for decreasing
+        for (int i = trades.size() - 1; i > -1; i--) {
+            Trade t = trades.get(i);
+            if (t.time / resolution > curBucket.timeMicros / resolution) {
                 if (curBucket.open != 0) res.add(curBucket);
-                curBucket = new OHLCV(t.timeNanos / resolution * resolution);
+                curBucket = new OHLCV(t.time / resolution * resolution);
             }
             if (curBucket.open == 0 && !t.isUneligibleOpen()) {
 //                logger.debug("{} open from tick {}", resolution, t);

@@ -41,7 +41,7 @@ public class QuestDBWriter {
                         "    high DOUBLE, \n" +
                         "    low DOUBLE, \n" +
                         "    close DOUBLE, \n" +
-                        "    volume INT, \n" +
+                        "    volume LONG, \n" +
                         "    ts TIMESTAMP\n" +
                         ") TIMESTAMP(ts) PARTITION BY %s";
             }
@@ -64,7 +64,10 @@ public class QuestDBWriter {
         writeCacheTrades.addAll(trades);
     }
 
-    public static void writeAggs(List<OHLCV> aggs) {
+    public static void writeAggs(String symbol, List<OHLCV> aggs) {
+        for (OHLCV agg : aggs) {
+            agg.ticker = symbol;
+        }
         writeCacheAggregates.addAll(aggs);
     }
 
@@ -87,7 +90,7 @@ public class QuestDBWriter {
     }
 
     public static void flushAggregates(String tableName) {
-        logger.info("Flushing {} aggregations", writeCacheAggregates.size());
+        logger.info("Flushing {} aggregates", writeCacheAggregates.size());
         try (TableWriter writer = engine.getWriter(cairoSecurityContext, tableName)) {
             for (OHLCV agg : writeCacheAggregates) {
                 TableWriter.Row row = writer.newRow(agg.timeMicros);
@@ -101,7 +104,7 @@ public class QuestDBWriter {
             }
             writer.commit();
         }
-        writeCacheTrades.clear();
+        writeCacheAggregates.clear();
     }
 
     public static void close() {

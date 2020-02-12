@@ -26,7 +26,7 @@ public class BackfillSymbolTask implements Runnable {
     public void run() {
         List<Trade> trades = PolygonClient.getTradesForSymbol(sdf.format(day.getTime()), symbol);
         // Sort trades by timestamp
-        trades.sort((a, b) -> a.timeNanos < b.timeNanos ? 1 : 0);
+        trades.sort((a, b) -> a.time < b.time ? 1 : 0);
         int numTrades = trades.size();
 
         if (numTrades > 0) {
@@ -35,8 +35,8 @@ public class BackfillSymbolTask implements Runnable {
                     sdf.format(day.getTime()),
                     symbol,
                     numTrades,
-                    trades.get(0).timeNanos / 1000,
-                    trades.get(trades.size() - 1).timeNanos / 1000);
+                    trades.get(0).time / 1000,
+                    trades.get(trades.size() - 1).time / 1000);
 
 //            OHLCV candle1d = TradeAggregator.aggregateDay(trades, day);
 //            List<OHLCV> candles1s = TradeAggregator.aggregate(trades, 1000);

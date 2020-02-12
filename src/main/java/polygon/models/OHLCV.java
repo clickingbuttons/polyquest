@@ -15,7 +15,7 @@ public class OHLCV implements Comparable<OHLCV> {
     @SerializedName("c")
     public double close = 0;
     @SerializedName("v")
-    public double volume = 0;
+    public long volume = 0;
     @SerializedName("t")
     public long timeMicros;
 
@@ -27,9 +27,9 @@ public class OHLCV implements Comparable<OHLCV> {
     }
 
     public String toString() {
-        return String.format("%d (%s)\t\to: %4.3f h: %4.3f l: %4.3f c: %4.3f v: %d",
+        return String.format("%d (%s) o: %4.3f h: %4.3f l: %4.3f c: %4.3f v: %d",
                 timeMicros,
-                sdf.format(new Date(timeMicros)),
+                sdf.format(new Date(timeMicros / 1000)),
                 open,
                 high,
                 low,

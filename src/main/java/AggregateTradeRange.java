@@ -20,15 +20,26 @@ public class AggregateTradeRange {
         AggregateDayStats res = new AggregateDayStats(day);
 
         List<Trade> dayTrades = QuestDBReader.getTrades(day);
-        logger.info("Aggregating {} trades", dayTrades.size());
+        logger.info("Aggregating {} trades at {} levels on {}", dayTrades.size(), String.join(",", aggregateLevels), sdf.format(day.getTime()));
 
         // dayTrades is sorted by symbol, time
-        List<OHLCV> agg1s = TradeAggregator.aggregate(dayTrades, 1000);
-        QuestDBWriter.writeAggs(agg1s);
+        int count = 0;
+        int lastIndex = 0;
+        String lastSym = dayTrades.get(0).ticker;
+        for (int i = 0; i < dayTrades.size(); i++) {
+            String sym = dayTrades.get(i).ticker;
+            if (sym.compareTo(lastSym) != 0) {
+                List<OHLCV> agg1s = TradeAggregator.aggregate(dayTrades.subList(lastIndex, i), 1000);
+                QuestDBWriter.writeAggs(lastSym, agg1s);
+                lastSym = sym;
+                lastIndex = i;
+                count++;
+            }
+        }
 
         long startTime = System.currentTimeMillis();
         QuestDBWriter.flushAggregates("agg1s");
-        logger.info("Flushed in {}s", (System.currentTimeMillis() - startTime) /1000 );
+        logger.info("Flushed {} symbols in {}s", count,  (System.currentTimeMillis() - startTime) /1000 );
 
         return res;
     }
@@ -39,8 +50,6 @@ public class AggregateTradeRange {
         for (Calendar day = (Calendar) from.clone(); day.before(to); day.add(Calendar.DATE, 1)) {
             if (!MarketCalendar.isMarketOpen(day))
                 continue;
-
-            logger.info("Aggregating {} levels on {}", String.join(",", aggregateLevels), sdf.format(day.getTime()));
 
             long startTime = System.currentTimeMillis();
             AggregateDayStats dayStats = aggregateDay(day, aggregateLevels);

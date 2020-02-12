@@ -10,7 +10,6 @@ import org.apache.logging.log4j.Logger;
 import polygon.models.*;
 
 import java.io.BufferedReader;
-import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.*;
@@ -84,7 +83,7 @@ public class PolygonClient {
                 trades.addAll(r.results);
                 if (r.results_count < perPage) // Last page
                     return trades;
-                offset = trades.get(trades.size() - 1).timeNanos;
+                offset = trades.get(trades.size() - 1).time;
             }
             catch (JsonSyntaxException e) {
                 // Happens about once every 5 months that we get incomplete response
