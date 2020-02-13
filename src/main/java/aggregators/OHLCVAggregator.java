@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class OHLCVAggregator {
-    public static List<OHLCV> aggregate(List<OHLCV> candles, int resolution) {
+    public static List<OHLCV> aggregate(List<OHLCV> candles, long resolution) {
         List<OHLCV> res = new ArrayList<>();
         if (candles.size() > 0) {
             OHLCV curBucket = new OHLCV(candles.get(0).timeMicros / resolution * resolution);

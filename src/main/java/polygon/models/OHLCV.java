@@ -19,7 +19,7 @@ public class OHLCV implements Comparable<OHLCV> {
     @SerializedName("t")
     public long timeMicros;
 
-    private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
 
     public OHLCV(long t) {

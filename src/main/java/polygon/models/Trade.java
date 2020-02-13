@@ -2,7 +2,9 @@ package polygon.models;
 
 import com.google.gson.annotations.SerializedName;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 public class Trade implements Comparable<Trade> {
@@ -27,9 +29,10 @@ public class Trade implements Comparable<Trade> {
     @SerializedName("c")
     public List<Integer> conditions = new ArrayList<>();
     @SerializedName("p")
-    public float price;
+    public double price;
     @SerializedName("z")
     public short tape;
+    private static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     public boolean hasFlag(int flag) {
         if (conditions.contains(flag))
@@ -113,7 +116,7 @@ public class Trade implements Comparable<Trade> {
     }
 
     public String toString() {
-        return String.format("%d - %d @ %.3f", time, size, price);
+        return String.format("%d (%s) - %d @ %.3f", time, sdf.format(new Date(time / 1000)), size, price);
     }
 
     @Override

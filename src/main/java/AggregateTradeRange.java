@@ -1,5 +1,6 @@
 import aggregators.AggregateAllStats;
 import aggregators.AggregateDayStats;
+import aggregators.OHLCVAggregator;
 import aggregators.TradeAggregator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -20,7 +21,7 @@ public class AggregateTradeRange {
         AggregateDayStats res = new AggregateDayStats(day);
 
         List<Trade> dayTrades = QuestDBReader.getTrades(day);
-        logger.info("Aggregating {} trades at {} levels on {}", dayTrades.size(), String.join(",", aggregateLevels), sdf.format(day.getTime()));
+        logger.info("{} aggregating {} trades at {} levels", sdf.format(day.getTime()), dayTrades.size(), String.join(",", aggregateLevels));
 
         // dayTrades is sorted by symbol, time
         int count = 0;
@@ -29,8 +30,10 @@ public class AggregateTradeRange {
         for (int i = 0; i < dayTrades.size(); i++) {
             String sym = dayTrades.get(i).ticker;
             if (sym.compareTo(lastSym) != 0) {
-                List<OHLCV> agg1s = TradeAggregator.aggregate(dayTrades.subList(lastIndex, i), 1000);
-                QuestDBWriter.writeAggs(lastSym, agg1s);
+                List<OHLCV> agg1s = TradeAggregator.aggregate(dayTrades.subList(lastIndex, i), 1000000);
+                List<OHLCV> agg1m = OHLCVAggregator.aggregate(agg1s, 60000000);
+                QuestDBWriter.writeAggs(lastSym, "agg1s", agg1s);
+                QuestDBWriter.writeAggs(lastSym, "agg1m", agg1m);
                 lastSym = sym;
                 lastIndex = i;
                 count++;
@@ -38,7 +41,7 @@ public class AggregateTradeRange {
         }
 
         long startTime = System.currentTimeMillis();
-        QuestDBWriter.flushAggregates("agg1s");
+        QuestDBWriter.flushAggregates();
         logger.info("Flushed {} symbols in {}s", count,  (System.currentTimeMillis() - startTime) /1000 );
 
         return res;

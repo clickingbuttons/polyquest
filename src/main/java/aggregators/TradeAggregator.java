@@ -12,7 +12,7 @@ import java.util.List;
 public class TradeAggregator {
 //    final static Logger logger = LogManager.getLogger(TradeAggregator.class);
 
-    public static List<OHLCV> aggregate(List<Trade> trades, int resolution) {
+    public static List<OHLCV> aggregate(List<Trade> trades, long resolution) {
         List<OHLCV> res = new ArrayList<>();
         if (trades.size() == 0) return res;
 

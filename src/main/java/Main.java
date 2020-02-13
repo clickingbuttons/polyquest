@@ -14,17 +14,14 @@ public class Main {
             QuestDBWriter.createTable("trades", "DAY");
             Calendar from = QuestDBReader.getLastTimestamp("trades");
             Calendar to = new GregorianCalendar();
-            to.add(-2, Calendar.DATE);
             BackfillTradeRange.backfill(from, to, 200);
         }
         else if (args[0].compareTo("aggregate") == 0) {
             List<String> aggregationLevels = new ArrayList<>();
             aggregationLevels.add("1s");
             aggregationLevels.add("1m");
-            aggregationLevels.add("1d");
             QuestDBWriter.createTable("agg1s", "DAY");
             QuestDBWriter.createTable("agg1m", "DAY");
-            QuestDBWriter.createTable("agg1d", "YEAR");
             Calendar from = QuestDBReader.getLastTimestamp("agg1s");
             Calendar to = QuestDBReader.getLastTimestamp("trades");
             AggregateTradeRange.aggregate(from, to, aggregationLevels);

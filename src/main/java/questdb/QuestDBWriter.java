@@ -9,8 +9,7 @@ import org.apache.logging.log4j.Logger;
 import polygon.models.OHLCV;
 import polygon.models.Trade;
 
-import java.util.List;
-import java.util.SortedSet;
+import java.util.*;
 import java.util.concurrent.ConcurrentSkipListSet;
 
 public class QuestDBWriter {
@@ -22,7 +21,7 @@ public class QuestDBWriter {
     private final static AllowAllSecurityContextFactory securityContextFactor = new AllowAllSecurityContextFactory();
     private final static CairoSecurityContext cairoSecurityContext = securityContextFactor.getInstance("admin");
     private final static SortedSet<Trade> writeCacheTrades = new ConcurrentSkipListSet<>();
-    private final static SortedSet<OHLCV> writeCacheAggregates = new ConcurrentSkipListSet<>();
+    private final static Map<String, SortedSet<OHLCV>> writeCacheAggregates = new HashMap<>();
 
     public static void createTable(String tableName, String partitionType) {
         try (SqlCompiler compiler = new SqlCompiler(engine)) {
@@ -44,6 +43,7 @@ public class QuestDBWriter {
                         "    volume LONG, \n" +
                         "    ts TIMESTAMP\n" +
                         ") TIMESTAMP(ts) PARTITION BY %s";
+                writeCacheAggregates.put(tableName, new ConcurrentSkipListSet<>());
             }
             String createTable = String.format(query, tableName, partitionType);
             compiler.compile(createTable);
@@ -64,11 +64,12 @@ public class QuestDBWriter {
         writeCacheTrades.addAll(trades);
     }
 
-    public static void writeAggs(String symbol, List<OHLCV> aggs) {
+    public static void writeAggs(String symbol, String tableName, List<OHLCV> aggs) {
         for (OHLCV agg : aggs) {
             agg.ticker = symbol;
         }
-        writeCacheAggregates.addAll(aggs);
+//        logger.info("{} {} {}", symbol, tableName, aggs.size());
+        writeCacheAggregates.get(tableName).addAll(aggs);
     }
 
     public static void flushTrades(String tableName) {
@@ -78,7 +79,7 @@ public class QuestDBWriter {
                 long microSeconds = t.getTimeMicros() - (5 * 60 * 60 * 1000000L);
                 TableWriter.Row row = writer.newRow(microSeconds);
                 row.putSym(0, t.ticker);
-                row.putFloat(1, t.price);
+                row.putDouble(1, t.price);
                 row.putInt(2, t.size);
                 row.putInt(3, t.encodeConditions());
                 row.putByte(4, t.encodeExchange());
@@ -89,22 +90,25 @@ public class QuestDBWriter {
         writeCacheTrades.clear();
     }
 
-    public static void flushAggregates(String tableName) {
-        logger.info("Flushing {} aggregates", writeCacheAggregates.size());
-        try (TableWriter writer = engine.getWriter(cairoSecurityContext, tableName)) {
-            for (OHLCV agg : writeCacheAggregates) {
-                TableWriter.Row row = writer.newRow(agg.timeMicros);
-                row.putSym(0, agg.ticker);
-                row.putDouble(1, agg.open);
-                row.putDouble(2, agg.high);
-                row.putDouble(3, agg.low);
-                row.putDouble(4, agg.close);
-                row.putDouble(5, agg.volume);
-                row.append();
+    public static void flushAggregates() {
+        for (String tableName : writeCacheAggregates.keySet()) {
+            Set<OHLCV> aggregates = writeCacheAggregates.get(tableName);
+            logger.info("Flushing {} {} aggregates", aggregates.size(), tableName);
+            try (TableWriter writer = engine.getWriter(cairoSecurityContext, tableName)) {
+                for (OHLCV agg : aggregates) {
+                    TableWriter.Row row = writer.newRow(agg.timeMicros);
+                    row.putSym(0, agg.ticker);
+                    row.putDouble(1, agg.open);
+                    row.putDouble(2, agg.high);
+                    row.putDouble(3, agg.low);
+                    row.putDouble(4, agg.close);
+                    row.putDouble(5, agg.volume);
+                    row.append();
+                }
+                writer.commit();
             }
-            writer.commit();
+            aggregates.clear();
         }
-        writeCacheAggregates.clear();
     }
 
     public static void close() {
