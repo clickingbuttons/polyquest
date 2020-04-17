@@ -8,9 +8,9 @@ public class BackfillAllStats {
     double tradeCount = 0;
     public List<Long> timesElapsed = new ArrayList<>();
 
-    public void add(BackfillDayStats day) {
-        symbolTradeCount += day.symbolsWithTrades.size();
-        tradeCount += day.curNumTrades.get();
+    public void add(BackfillRangeStats day) {
+        symbolTradeCount += day.symbolsWithData.size();
+        tradeCount += day.curNumRows.get();
 
         timesElapsed.add(day.timeElapsed);
     }
@@ -19,7 +19,7 @@ public class BackfillAllStats {
         long totalMs = timesElapsed.stream().mapToLong(Long::longValue).sum();
         long averageMs = totalMs / timesElapsed.size();
 
-        return String.format("Overall stats: %d days with %d trades in %ds (%ds/day): %d trades",
+        return String.format("Overall stats: %d days with %f trades in %ds (%ds/day): %f trades",
                 timesElapsed.size(),
                 symbolTradeCount,
                 totalMs / 1000,

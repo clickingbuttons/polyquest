@@ -62,21 +62,21 @@ public class QuestDBReader {
         CairoEngine engine = new CairoEngine(configuration);
         SqlCompiler compiler = new SqlCompiler(engine);
         String formatted = sdf.format(date.getTime());
-        String query = String.format("select *" +
+        String query = String.format("select sym, price, size, conditions, exchange, ts" +
                         " from trades" +
-                        " where ts>'%sT00:00:00.000Z' and ts<'%sT23:59:59.999Z'" +
-                        " order by sym", formatted, formatted);
+                        " where ts='%s' and (sym='A' or sym='AA')" +
+                        " order by sym, ts", formatted, formatted);
         try (RecordCursor cursor = compiler.compile(query).getRecordCursorFactory().getCursor()) {
             Record record = cursor.getRecord();
 
             while (cursor.hasNext()) {
                 Trade t = new Trade();
                 t.ticker = record.getSym(0).toString();
-                t.price = record.getFloat(1);
+                t.price = record.getDouble(1);
                 t.size = record.getInt(2);
                 t.decodeConditions(record.getInt(3));
-                t.exchange = record.getByte(4);
-                t.time = record.getTimestamp(5);
+                t.decodeExchange(record.getByte(4));
+                t.timeMicros = record.getTimestamp(5);
                 res.add(t);
             }
         } catch (SqlException e) {

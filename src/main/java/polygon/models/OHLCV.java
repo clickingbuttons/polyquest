@@ -2,6 +2,7 @@ package polygon.models;
 
 import com.google.gson.annotations.SerializedName;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
 import java.util.Date;
 
 public class OHLCV implements Comparable<OHLCV> {
@@ -19,9 +20,6 @@ public class OHLCV implements Comparable<OHLCV> {
     @SerializedName("t")
     public long timeMicros;
 
-    private static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-
-
     public OHLCV(long t) {
         timeMicros = t;
     }
@@ -29,7 +27,7 @@ public class OHLCV implements Comparable<OHLCV> {
     public String toString() {
         return String.format("%d (%s) o: %4.3f h: %4.3f l: %4.3f c: %4.3f v: %d",
                 timeMicros,
-                sdf.format(new Date(timeMicros / 1000)),
+                Instant.ofEpochMilli(timeMicros / 1000).toString(),
                 open,
                 high,
                 low,

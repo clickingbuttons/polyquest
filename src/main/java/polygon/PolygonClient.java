@@ -25,10 +25,13 @@ public class PolygonClient {
     final static Logger logger = LogManager.getLogger(PolygonClient.class);
     // Not ideal, but we start getting 500s
     final static RateLimiter rateLimiter = RateLimiter.create(200);
+    final static long estOffsetMicros = 5 * 60 * 60 * 1000000L;
+    final static long dayMicros = 24 * 60 * 60 * 1000000L;
+    public final static int perPage = 50000;
 
     private static String doRequest(String uri) {
         StringBuffer content;
-        for (int i = 0; i < 15; i++) {
+        for (int i = 0; i < 150; i++) {
             try {
                 rateLimiter.acquire();
                 URL url = new URL(uri);
@@ -71,7 +74,6 @@ public class PolygonClient {
     public static List<Trade> getTradesForSymbol(String day, String symbol) {
         List<Trade> trades = new ArrayList<>();
 
-        int perPage = 50000;
         long offset = 0;
         while(true) {
             String url = String.format("%s/ticks/stocks/trades/%s/%s?apiKey=%s&limit=%d&timestamp=%d",
@@ -81,9 +83,16 @@ public class PolygonClient {
             try {
                 TradeResponse r = gson.fromJson(content, TradeResponse.class);
                 trades.addAll(r.results);
-                if (r.results_count < perPage) // Last page
+                if (r.results_count < perPage) {
+                    // Last page
+                    for (Trade t : r.results) {
+                        // Polygon returns UDT nanoseconds for trade data. We save in EST microseconds
+                        t.timeMicros /= 1000;
+                        t.timeMicros -= estOffsetMicros;
+                    }
                     return trades;
-                offset = trades.get(trades.size() - 1).time;
+                }
+                offset = trades.get(trades.size() - 1).timeMicros;
             }
             catch (JsonSyntaxException e) {
                 // Happens about once every 5 months that we get incomplete response
@@ -92,35 +101,36 @@ public class PolygonClient {
         }
     }
 
-    public static List<OHLCV> getMinutesForSymbol(Calendar day, String symbol) {
+    public static List<OHLCV> getAggsForSymbol(Calendar from, Calendar to, String type, String symbol) {
         final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-        Calendar nextDay = (Calendar) day.clone();
-        nextDay.add(Calendar.DATE, 1);
 
-        String url = String.format("%s/aggs/ticker/%s/range/1/minute/%s/%s?apiKey=%s",
-                baseUrl, symbol, sdf.format(day.getTime()), sdf.format(nextDay.getTime()), apiKey);
+        String url = String.format("%s/aggs/ticker/%s/range/1/%s/%s/%s?apiKey=%s",
+                baseUrl, symbol, type, sdf.format(from.getTime()), sdf.format(to.getTime()), apiKey);
 //        logger.debug(url);
         String content = doRequest(url);
         if (content == null)
-            return null;
+            return new ArrayList<>();
         AggResponse r = gson.fromJson(content, AggResponse.class);
+        if (r.results == null) {
+            return new ArrayList<>();
+        }
+        for (OHLCV candle : r.results) {
+            // Polygon returns UDT milliseconds for agg data. We save in EST microseconds
+            candle.timeMicros *= 1000;
+            if (type.compareTo("day") == 0) {
+                // There are varying hours for agg1d data (4:00am - 5:00am UDT)
+                // Round down to nearest day
+                candle.timeMicros -= candle.timeMicros % dayMicros;
+            }
+            else if (type.compareTo("minute") == 0) {
+                candle.timeMicros -= estOffsetMicros;
+            }
+        }
+        if (r.results.size() == perPage) {
+            logger.error("Exceeded maximum size {} for request {}!", perPage, url);
+            System.exit(1);
+        }
         return r.results;
-    }
-
-    public static OHLCV getDayForSymbol(Calendar day, String symbol) {
-        final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-        Calendar nextDay = (Calendar) day.clone();
-        nextDay.add(Calendar.DATE, 1);
-
-        String url = String.format("%s/aggs/ticker/%s/range/1/day/%s/%s?apiKey=%s",
-                baseUrl, symbol, sdf.format(day.getTime()), sdf.format(nextDay.getTime()), apiKey);
-//        logger.debug(url);
-        String content = doRequest(url);
-        AggResponse r = gson.fromJson(content, AggResponse.class);
-        if (r.results != null && r.results.size() > 0)
-            return r.results.get(0);
-
-        return null;
     }
 
     public static List<Ticker> getTickers() {

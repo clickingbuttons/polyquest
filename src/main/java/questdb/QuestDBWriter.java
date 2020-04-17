@@ -68,32 +68,33 @@ public class QuestDBWriter {
         for (OHLCV agg : aggs) {
             agg.ticker = symbol;
         }
-//        logger.info("{} {} {}", symbol, tableName, aggs.size());
         writeCacheAggregates.get(tableName).addAll(aggs);
     }
 
     public static void flushTrades(String tableName) {
-        logger.info("Flushing {} trades", writeCacheTrades.size());
-        try (TableWriter writer = engine.getWriter(cairoSecurityContext, tableName)) {
-            for (Trade t : writeCacheTrades) {
-                long microSeconds = t.getTimeMicros() - (5 * 60 * 60 * 1000000L);
-                TableWriter.Row row = writer.newRow(microSeconds);
-                row.putSym(0, t.ticker);
-                row.putDouble(1, t.price);
-                row.putInt(2, t.size);
-                row.putInt(3, t.encodeConditions());
-                row.putByte(4, t.encodeExchange());
-                row.append();
+        if (writeCacheTrades.size() > 0) {
+            logger.info("Flushing {} trades", writeCacheTrades.size());
+            try (TableWriter writer = engine.getWriter(cairoSecurityContext, tableName)) {
+                for (Trade t : writeCacheTrades) {
+                    long microSeconds = t.getTimeMicros();
+                    TableWriter.Row row = writer.newRow(microSeconds);
+                    row.putSym(0, t.ticker);
+                    row.putDouble(1, t.price);
+                    row.putInt(2, t.size);
+                    row.putInt(3, t.encodeConditions());
+                    row.putByte(4, t.encodeExchange());
+                    row.append();
+                }
+                writer.commit();
             }
-            writer.commit();
+            writeCacheTrades.clear();
         }
-        writeCacheTrades.clear();
     }
 
     public static void flushAggregates() {
         for (String tableName : writeCacheAggregates.keySet()) {
             Set<OHLCV> aggregates = writeCacheAggregates.get(tableName);
-            logger.info("Flushing {} {} aggregates", aggregates.size(), tableName);
+            logger.info("Flushing {} {} candles", aggregates.size(), tableName);
             try (TableWriter writer = engine.getWriter(cairoSecurityContext, tableName)) {
                 for (OHLCV agg : aggregates) {
                     TableWriter.Row row = writer.newRow(agg.timeMicros);
@@ -102,7 +103,7 @@ public class QuestDBWriter {
                     row.putDouble(2, agg.high);
                     row.putDouble(3, agg.low);
                     row.putDouble(4, agg.close);
-                    row.putDouble(5, agg.volume);
+                    row.putLong(5, agg.volume);
                     row.append();
                 }
                 writer.commit();

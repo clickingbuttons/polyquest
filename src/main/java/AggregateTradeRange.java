@@ -14,23 +14,23 @@ import java.util.Calendar;
 import java.util.List;
 
 public class AggregateTradeRange {
-    final static Logger logger = LogManager.getLogger(BackfillTradeRange.class);
+    final static Logger logger = LogManager.getLogger(BackfillRange.class);
     final static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 
     static AggregateDayStats aggregateDay(Calendar day, List<String> aggregateLevels) {
         AggregateDayStats res = new AggregateDayStats(day);
 
+        // dayTrades is sorted by symbol, time
         List<Trade> dayTrades = QuestDBReader.getTrades(day);
         logger.info("{} aggregating {} trades at {} levels", sdf.format(day.getTime()), dayTrades.size(), String.join(",", aggregateLevels));
 
-        // dayTrades is sorted by symbol, time
         int count = 0;
         int lastIndex = 0;
         String lastSym = dayTrades.get(0).ticker;
         for (int i = 0; i < dayTrades.size(); i++) {
             String sym = dayTrades.get(i).ticker;
             if (sym.compareTo(lastSym) != 0) {
-                List<OHLCV> agg1s = TradeAggregator.aggregate(dayTrades.subList(lastIndex, i), 1000000);
+                List<OHLCV> agg1s = TradeAggregator.aggregate(dayTrades.subList(lastIndex, i), 60000000);
                 List<OHLCV> agg1m = OHLCVAggregator.aggregate(agg1s, 60000000);
                 QuestDBWriter.writeAggs(lastSym, "agg1s", agg1s);
                 QuestDBWriter.writeAggs(lastSym, "agg1m", agg1m);

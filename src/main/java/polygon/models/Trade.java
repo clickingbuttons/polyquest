@@ -2,16 +2,15 @@ package polygon.models;
 
 import com.google.gson.annotations.SerializedName;
 
-import java.text.SimpleDateFormat;
+import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 
 public class Trade implements Comparable<Trade> {
     public String ticker;
-    // Nanoseconds when downloaded from Polygon. Microseconds when loaded from QuestDB.
+    // EST microsecond timestamp
     @SerializedName("t")
-    public long time;
+    public long timeMicros;
     // Participant/Exchange timestamp
     @SerializedName("y")
     public long exchangeTimeNanos;
@@ -19,7 +18,7 @@ public class Trade implements Comparable<Trade> {
     @SerializedName("f")
     public long trfTimeNanos;
     @SerializedName("q")
-    public int sequenceNumber;
+    public long sequenceNumber;
     @SerializedName("i")
     public String id;
     @SerializedName("x")
@@ -32,7 +31,6 @@ public class Trade implements Comparable<Trade> {
     public double price;
     @SerializedName("z")
     public short tape;
-    private static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     public boolean hasFlag(int flag) {
         if (conditions.contains(flag))
@@ -41,47 +39,14 @@ public class Trade implements Comparable<Trade> {
         return false;
     }
 
-    // https://www.ctaplan.com/publicdocs/ctaplan/notifications/trader-update/CTS_BINARY_OUTPUT_SPECIFICATION.pdf
-    // PAGE 61
-    public boolean isUneligibleOpen() {
-        return  hasFlag(TradeCondition.AveragePrice.condition) ||
-                hasFlag(TradeCondition.CashTrade.condition) ||
-                hasFlag(TradeCondition.PriceVariation.condition) ||
-                hasFlag(TradeCondition.OddLot.condition) ||
-                hasFlag(TradeCondition.MarketCenterOfficialOpen.condition) || // Debatable
-                hasFlag(TradeCondition.MarketCenterOfficialClose.condition) ||
-                hasFlag(TradeCondition.NextDay.condition) ||
-                hasFlag(TradeCondition.Seller.condition) ||
-                hasFlag(TradeCondition.Contingent.condition) ||
-                hasFlag(TradeCondition.ContingentQualified.condition) ||
-                hasFlag(TradeCondition.CorrectedConsolidatedClosePrice.condition);
-    }
+    public boolean hasCondition(List<TradeCondition> conditions) {
+        for (TradeCondition condition : conditions) {
+            if (hasFlag(condition.condition)) {
+                return true;
+            }
+        }
 
-    public boolean isUneligibleClose() {
-        return  hasFlag(TradeCondition.AveragePrice.condition) ||
-                hasFlag(TradeCondition.CashTrade.condition) ||
-                hasFlag(TradeCondition.PriceVariation.condition) ||
-                hasFlag(TradeCondition.OddLot.condition) ||
-                hasFlag(TradeCondition.NextDay.condition) ||
-                hasFlag(TradeCondition.MarketCenterOfficialOpen.condition) ||
-                hasFlag(TradeCondition.MarketCenterOfficialClose.condition) || // Debatable
-                hasFlag(TradeCondition.Seller.condition) ||
-                hasFlag(TradeCondition.Contingent.condition) ||
-                hasFlag(TradeCondition.ContingentQualified.condition);
-    }
-
-    public boolean isUneligibleHighLow() {
-        return  hasFlag(TradeCondition.AveragePrice.condition) ||
-                hasFlag(TradeCondition.CashTrade.condition) ||
-                hasFlag(TradeCondition.PriceVariation.condition) ||
-                hasFlag(TradeCondition.OddLot.condition) ||
-                hasFlag(TradeCondition.NextDay.condition) ||
-                hasFlag(TradeCondition.MarketCenterOfficialOpen.condition) || // Debatable
-                hasFlag(TradeCondition.MarketCenterOfficialClose.condition) || // Debatable
-                hasFlag(TradeCondition.Seller.condition) ||
-                hasFlag(TradeCondition.Contingent.condition) ||
-                hasFlag(TradeCondition.ContingentQualified.condition) ||
-                hasFlag(TradeCondition.CorrectedConsolidatedClosePrice.condition); // Debatable
+        return false;
     }
 
     public int encodeConditions() {
@@ -111,18 +76,28 @@ public class Trade implements Comparable<Trade> {
         conditions.add((encoded & 0xFF000000) >> 24);
     }
 
+    public void decodeExchange(byte encoded) {
+        exchange = encoded & 0x3F;
+        tape = (short) (encoded >> 6);
+    }
+
     public long getTimeMicros() {
-        return (time + 500) / 1000;
+        return (timeMicros + 500) / 1000;
     }
 
     public String toString() {
-        return String.format("%d (%s) - %d @ %.3f", time, sdf.format(new Date(time / 1000)), size, price);
+        return String.format("%d (%s) - %d @ %.3f",
+                timeMicros,
+                Instant.ofEpochMilli(timeMicros / 1000).toString(),
+                size,
+                price
+        );
     }
 
     @Override
     public int compareTo(Trade t2) {
         // Can't return 0 if equal because used in Set
-        if (t2.time >= time) {
+        if (t2.timeMicros >= timeMicros) {
             return -1;
         }
         return 1;

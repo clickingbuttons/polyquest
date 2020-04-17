@@ -1,5 +1,5 @@
 import backfill.BackfillAllStats;
-import backfill.BackfillDayStats;
+import backfill.BackfillRangeStats;
 import backfill.BackfillSymbolTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -17,18 +17,18 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-public class BackfillTradeRange {
-    final static Logger logger = LogManager.getLogger(BackfillTradeRange.class);
+public class BackfillRange {
+    final static Logger logger = LogManager.getLogger(BackfillRange.class);
     final static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
     final static PolygonClient client = new PolygonClient();
     final static String tableName = "trades";
 
-    static BackfillDayStats backfillDay(Calendar day, List<String> tickerStrings, int threadCount) {
-        BackfillDayStats res = new BackfillDayStats(day, tickerStrings.size());
+    static BackfillRangeStats backfillRange(String type, Calendar from, Calendar to, List<String> tickerStrings, int threadCount) {
+        BackfillRangeStats res = new BackfillRangeStats(type, from, to, tickerStrings.size());
         List<Runnable> tasks = new ArrayList<>();
 
         for (String ticker : tickerStrings) {
-            tasks.add(new BackfillSymbolTask(day, ticker, res));
+            tasks.add(new BackfillSymbolTask(type, from, to, ticker, res));
         }
 
         // Only about 1/4 of 33676 symbols have trades.
@@ -46,6 +46,7 @@ public class BackfillTradeRange {
         }
         long startTime = System.currentTimeMillis();
         QuestDBWriter.flushTrades(tableName);
+        QuestDBWriter.flushAggregates();
         logger.info("Flushed in {}s", (System.currentTimeMillis() - startTime) /1000 );
 
         return res;
@@ -90,7 +91,7 @@ public class BackfillTradeRange {
         return false;
     }
 
-    public static void backfill(Calendar from, Calendar to, int threadCount) {
+    public static void backfill(String type, Calendar from, Calendar to, int stepType, int stepSize, int threadCount) {
         logger.info("Loading tickers...");
         List<Ticker> tickers;
         try {
@@ -103,7 +104,7 @@ public class BackfillTradeRange {
             saveTickers(tickers);
         }
         int prevSize = tickers.size();
-        tickers.removeIf(BackfillTradeRange::isBadTicker);
+        tickers.removeIf(BackfillRange::isBadTicker);
         logger.info("Removed {} weird tickers. {} left.", prevSize - tickers.size(), tickers.size());
 
         List<String> tickerStrings = tickers
@@ -128,14 +129,22 @@ public class BackfillTradeRange {
         }
 
         BackfillAllStats allStats = new BackfillAllStats();
-        for (Calendar day = (Calendar) from.clone(); day.before(to); day.add(Calendar.DATE, 1)) {
-            if (!MarketCalendar.isMarketOpen(day))
+        for (Calendar start = (Calendar) from.clone(); start.before(to); start.add(stepType, stepSize)) {
+            if (stepType == Calendar.DATE && stepSize == 1 && !MarketCalendar.isMarketOpen(start))
                 continue;
-            logger.info("Backfilling {} tickers on {} using {} threads",
-                    tickerStrings.size(), sdf.format(day.getTime()), threadCount);
+            Calendar end = (Calendar) start.clone();
+            end.add(stepType, stepSize);
+            if (end.after(to)) {
+                end = (Calendar) to.clone();
+            }
+            logger.info("Backfilling {} tickers from {} to {} using {} threads",
+                    tickerStrings.size(),
+                    sdf.format(start.getTime()),
+                    sdf.format(end.getTime()),
+                    threadCount);
 
             long startTime = System.currentTimeMillis();
-            BackfillDayStats dayStats = backfillDay(day, tickerStrings, threadCount);
+            BackfillRangeStats dayStats = backfillRange(type, start, end, tickerStrings, threadCount);
             dayStats.timeElapsed = System.currentTimeMillis() - startTime;
 
             allStats.add(dayStats);

@@ -2,6 +2,7 @@ package backfill;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import polygon.models.OHLCV;
 import polygon.models.Trade;
 import polygon.PolygonClient;
 import questdb.QuestDBWriter;
@@ -11,48 +12,81 @@ import java.util.Calendar;
 import java.util.List;
 
 public class BackfillSymbolTask implements Runnable {
-    private Calendar day;
+    private Calendar from;
+    private Calendar to;
     private String symbol;
-    private BackfillDayStats stats;
+    private String type;
+    private BackfillRangeStats stats;
     private final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
     final static Logger logger = LogManager.getLogger(BackfillSymbolTask.class);
 
-    public BackfillSymbolTask(Calendar day, String symbol, BackfillDayStats stats) {
-        this.day = (Calendar) day.clone();
+    public BackfillSymbolTask(String type, Calendar from, Calendar to, String symbol, BackfillRangeStats stats) {
+        this.from = (Calendar) from.clone();
+        this.to = (Calendar) to.clone();
         this.symbol = symbol;
         this.stats = stats;
+        this.type = type;
     }
 
-    public void run() {
-        List<Trade> trades = PolygonClient.getTradesForSymbol(sdf.format(day.getTime()), symbol);
+    private void runTrades() {
+        List<Trade> trades = PolygonClient.getTradesForSymbol(sdf.format(from.getTime()), symbol);
         // Sort trades by timestamp
-        trades.sort((a, b) -> a.time < b.time ? 1 : 0);
+        trades.sort((a, b) -> a.timeMicros < b.timeMicros ? 1 : 0);
         int numTrades = trades.size();
 
         if (numTrades > 0) {
-            stats.symbolsWithTrades.add(symbol);
+            stats.symbolsWithData.add(symbol);
             logger.debug("{} {} had {} trades from {} to {}",
-                    sdf.format(day.getTime()),
+                    sdf.format(from.getTime()),
                     symbol,
                     numTrades,
-                    trades.get(0).time / 1000,
-                    trades.get(trades.size() - 1).time / 1000);
-
-//            OHLCV candle1d = TradeAggregator.aggregateDay(trades, day);
-//            List<OHLCV> candles1s = TradeAggregator.aggregate(trades, 1000);
-//            List<OHLCV> candles1m = OHLCVAggregator.aggregate(candles1s, 1000 * 60);
-//            List<OHLCV> candles5m = OHLCVAggregator.aggregate(candles1m, 1000 * 60 * 5);
-//            List<OHLCV> candles1h = OHLCVAggregator.aggregate(candles5m, 1000 * 60 * 60);
+                    trades.get(0).timeMicros / 1000,
+                    trades.get(trades.size() - 1).timeMicros / 1000);
 
             QuestDBWriter.writeTrades(symbol, trades);
-            stats.curNumTrades.addAndGet(trades.size());
+            stats.curNumRows.addAndGet(trades.size());
             trades.clear();
         }
-
         int num = stats.curNumSymbols.incrementAndGet();
         if (num % 500 == 0 || num == stats.numSymbols) {
-            logger.info("{}: {} / {} ({} w/trades)",
-                    sdf.format(day.getTime()), num, stats.numSymbols, stats.symbolsWithTrades.size());
+            logger.info("{}: {} / {} ({} w/data)",
+                    sdf.format(from.getTime()), num, stats.numSymbols, stats.symbolsWithData.size());
+        }
+    }
+
+    private void runAgg(List<OHLCV> agg) {
+        int numAggs = agg.size();
+        if (numAggs > 0) {
+            stats.symbolsWithData.add(symbol);
+            logger.debug("{} {} had {} candles from {} to {}",
+                    sdf.format(from.getTime()),
+                    symbol,
+                    numAggs,
+                    agg.get(0).timeMicros,
+                    agg.get(agg.size() - 1).timeMicros);
+
+            QuestDBWriter.writeAggs(symbol, type, agg);
+            stats.curNumRows.addAndGet(agg.size());
+            agg.clear();
+        }
+        int num = stats.curNumSymbols.incrementAndGet();
+        if (num % 500 == 0 || num == stats.numSymbols) {
+            logger.info("{} to {}: {} / {} ({} w/data)",
+                    sdf.format(from.getTime()), sdf.format(to.getTime()), num, stats.numSymbols, stats.symbolsWithData.size());
+        }
+    }
+
+    public void run() {
+        if (type.compareTo("trades") == 0) {
+            runTrades();
+        }
+        else if (type.compareTo("agg1m") == 0) {
+            List<OHLCV> agg1m = PolygonClient.getAggsForSymbol(from, to, "minute", symbol);
+            runAgg(agg1m);
+        }
+        else if (type.compareTo("agg1d") == 0) {
+            List<OHLCV> agg1d = PolygonClient.getAggsForSymbol(from, to, "day", symbol);
+            runAgg(agg1d);
         }
     }
 }
