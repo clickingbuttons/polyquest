@@ -6,6 +6,8 @@ import io.questdb.cairo.sql.Record;
 import io.questdb.cairo.sql.RecordCursor;
 import io.questdb.griffin.SqlCompiler;
 import io.questdb.griffin.SqlException;
+import io.questdb.griffin.SqlExecutionContext;
+import io.questdb.griffin.SqlExecutionContextImpl;
 import polygon.models.Trade;
 
 import java.text.SimpleDateFormat;
@@ -20,7 +22,8 @@ public class QuestDBReader {
     private final static CairoSecurityContext cairoSecurityContext = securityContextFactor.getInstance("admin");
     private final static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
     // Start of Polygon.io data
-    private final static Calendar polygonStart = new GregorianCalendar(2010, Calendar.JANUARY, 1);
+    private final static Calendar polygonStart = new GregorianCalendar(2004, Calendar.JANUARY, 1);
+    private static final SqlExecutionContext sqlExecutionContext = new SqlExecutionContextImpl();
 
     public static Calendar getLastTimestamp(String tableName) {
         Calendar res = (Calendar) polygonStart.clone();
@@ -66,7 +69,7 @@ public class QuestDBReader {
                         " from trades" +
                         " where ts='%s' and (sym='A' or sym='AA')" +
                         " order by sym, ts", formatted, formatted);
-        try (RecordCursor cursor = compiler.compile(query).getRecordCursorFactory().getCursor()) {
+        try (RecordCursor cursor = compiler.compile(query, sqlExecutionContext).getRecordCursorFactory().getCursor(sqlExecutionContext)) {
             Record record = cursor.getRecord();
 
             while (cursor.hasNext()) {

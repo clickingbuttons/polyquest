@@ -1,9 +1,13 @@
 package questdb;
 
 import io.questdb.cairo.*;
+import io.questdb.cairo.security.AllowAllCairoSecurityContext;
 import io.questdb.cairo.security.AllowAllSecurityContextFactory;
 import io.questdb.griffin.SqlCompiler;
 import io.questdb.griffin.SqlException;
+import io.questdb.griffin.SqlExecutionContext;
+import io.questdb.griffin.SqlExecutionContextImpl;
+import io.questdb.griffin.engine.functions.bind.BindVariableService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import polygon.models.OHLCV;
@@ -22,8 +26,18 @@ public class QuestDBWriter {
     private final static CairoSecurityContext cairoSecurityContext = securityContextFactor.getInstance("admin");
     private final static SortedSet<Trade> writeCacheTrades = new ConcurrentSkipListSet<>();
     private final static Map<String, SortedSet<OHLCV>> writeCacheAggregates = new HashMap<>();
+    private static final SqlExecutionContext sqlExecutionContext = new SqlExecutionContextImpl();
 
-    public static void createTable(String tableName, String partitionType) {
+    private static String getPartitionType(String type) {
+        if (type.equals("agg1d")) {
+            return "YEAR";
+        }
+
+        return "DAY";
+    }
+
+    public static void createTable(String tableName) {
+        String partitionType = getPartitionType(tableName);
         try (SqlCompiler compiler = new SqlCompiler(engine)) {
             String query = "CREATE TABLE %s (\n" +
                     "    sym SYMBOL CACHE INDEX, \n" +
@@ -46,7 +60,7 @@ public class QuestDBWriter {
                 writeCacheAggregates.put(tableName, new ConcurrentSkipListSet<>());
             }
             String createTable = String.format(query, tableName, partitionType);
-            compiler.compile(createTable);
+            compiler.compile(createTable, sqlExecutionContext);
         } catch (SqlException e) {
             if (e.getMessage().contains("table already exists")) {
                 logger.info("Table {} already exists", tableName);

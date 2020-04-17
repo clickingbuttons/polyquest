@@ -91,7 +91,32 @@ public class BackfillRange {
         return false;
     }
 
-    public static void backfill(String type, Calendar from, Calendar to, int stepType, int stepSize, int threadCount) {
+    private static int getStepType(String type) {
+        if (type.equals("agg1m")) {
+            return Calendar.MONTH;
+        }
+        else if (type.equals("agg1d")) {
+            return Calendar.YEAR;
+        }
+
+        return Calendar.DATE;
+    }
+
+    private static int getStepSize(String type) {
+        if (type.equals("agg1m")) {
+            // Exchange active from 4:00 - 20:00 (https://polygon.io/blog/frequently-asked-questions/)
+            // Maximum 23 trading days per month
+            return PolygonClient.perPage / ((20 - 4) * 60 * 23);
+        }
+        else if (type.equals("agg1d")) {
+            // 263 max work days in year, 9 holidays minimum
+            return PolygonClient.perPage / (263 - 9);
+        }
+
+        return 1;
+    }
+
+    public static void backfill(String type, Calendar from, Calendar to, int threadCount) {
         logger.info("Loading tickers...");
         List<Ticker> tickers;
         try {
@@ -128,6 +153,8 @@ public class BackfillRange {
             lastTicker = ticker;
         }
 
+        int stepSize = getStepSize(type);
+        int stepType = getStepType(type);
         BackfillAllStats allStats = new BackfillAllStats();
         for (Calendar start = (Calendar) from.clone(); start.before(to); start.add(stepType, stepSize)) {
             if (stepType == Calendar.DATE && stepSize == 1 && !MarketCalendar.isMarketOpen(start))

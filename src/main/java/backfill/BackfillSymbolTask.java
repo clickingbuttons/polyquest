@@ -77,14 +77,14 @@ public class BackfillSymbolTask implements Runnable {
     }
 
     public void run() {
-        if (type.compareTo("trades") == 0) {
+        if (type.equals("trades")) {
             runTrades();
         }
-        else if (type.compareTo("agg1m") == 0) {
+        else if (type.equals("agg1m")) {
             List<OHLCV> agg1m = PolygonClient.getAggsForSymbol(from, to, "minute", symbol);
             runAgg(agg1m);
         }
-        else if (type.compareTo("agg1d") == 0) {
+        else if (type.equals("agg1d")) {
             List<OHLCV> agg1d = PolygonClient.getAggsForSymbol(from, to, "day", symbol);
             runAgg(agg1d);
         }
