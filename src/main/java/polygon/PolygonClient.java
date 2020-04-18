@@ -17,6 +17,8 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
+import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class PolygonClient {
     static String baseUrl = "https://api.polygon.io/v2";
@@ -30,30 +32,27 @@ public class PolygonClient {
     public final static int perPage = 50000;
 
     private static String doRequest(String url) {
-        StringBuffer content;
-        for (int i = 0; i < 150; i++) {
+        for (int i = 0; i < 15; i++) {
             try {
                 rateLimiter.acquire();
                 HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
                 con.setRequestProperty("Accept", "application/json");
-                con.setRequestMethod("GET");
-                con.setDoOutput(true);
                 con.setConnectTimeout(5 * 1000);
                 con.setReadTimeout(8 * 1000);
 
                 BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
                 String inputLine;
-                content = new StringBuffer();
+                StringBuffer content = new StringBuffer();
                 while ((inputLine = in.readLine()) != null) {
                     content.append(inputLine);
                 }
                 in.close();
                 con.disconnect();
 
-                int code = con.getResponseCode();
-                if (code == 200)
+                if (con.getResponseCode() == 200) {
                     return content.toString();
-                Thread.sleep((i + 1) * (i + 1) * 100);
+                }
+                Thread.sleep(Math.min((i + 1) * (i + 1) * 100, 10000));
             } catch (SocketTimeoutException e) {
                 logger.debug("{} timeout", url);
             } catch (MalformedURLException|ProtocolException|InterruptedException|SocketException e) {
@@ -106,33 +105,16 @@ public class PolygonClient {
             String url = String.format("%s/aggs/ticker/%s/range/1/%s/%s/%s?apiKey=%s",
                     baseUrl, symbol, type, sdf.format(from.getTime()), sdf.format(to.getTime()), apiKey);
             String content = doRequest(url);
-            if (content == null)
+            if (content == null) {
                 return new ArrayList<>();
-                try {
-                    AggResponse r = gson.fromJson(content, AggResponse.class);
-                    if (r.results == null) {
-                        return new ArrayList<>();
-                    }
-                    for (OHLCV candle : r.results) {
-                        // Polygon returns UDT milliseconds for agg data. We save in EST microseconds
-                        candle.timeMicros *= 1000;
-                        if (type.equals("day")) {
-                            // There are varying hours for agg1d data (4:00am - 5:00am UDT)
-                            // Round down to nearest day
-                            candle.timeMicros -= candle.timeMicros % dayMicros;
-                        } else if (type.equals("minute")) {
-                            candle.timeMicros -= estOffsetMicros;
-                        }
-                    }
-                    if (r.results.size() == perPage) {
-                        logger.error("Exceeded maximum size {} for request {}!", perPage, url);
-                        System.exit(1);
-                    }
-                    return r.results;
-                } catch (JsonSyntaxException e) {
-                    // Happens about once every 5 months that we get incomplete response
-                    logger.warn(e);
-                }
+            }
+            try {
+                AggResponse r = gson.fromJson(content, AggResponse.class);
+                return normalizeOHLCV(type, r.results);
+            } catch (JsonSyntaxException e) {
+                // Happens about once every 5 months that we get incomplete response
+                logger.warn(e);
+            }
         }
     }
 
@@ -145,13 +127,62 @@ public class PolygonClient {
                     baseUrl, apiKey, perPage, page);
             logger.info("Downloading tickers {} / 35113+", (page - 1) * 50);
             String content = doRequest(url);
-            if (content == null)
-                return null;
             TickerResponse r = gson.fromJson(content, TickerResponse.class);
             tickers.addAll(r.tickers);
 
             if (r.tickers.size() < perPage) // Last page
                 return tickers;
+        }
+    }
+
+    private static List<OHLCV> normalizeOHLCV(String type, List<OHLCV> aggs) {
+        if (aggs == null) {
+            return new ArrayList<>();
+        }
+        for (OHLCV candle : aggs) {
+            // Polygon returns UDT milliseconds for agg data. We save in EST microseconds
+            candle.timeMicros *= 1000;
+            if (type.equals("day")) {
+                // There are varying hours for agg1d data (4:00am - 5:00am UDT)
+                // Round down to nearest day
+                candle.timeMicros -= candle.timeMicros % dayMicros;
+            } else if (type.equals("minute")) {
+                candle.timeMicros -= estOffsetMicros;
+            }
+        }
+
+        return aggs;
+    }
+
+    public static List<OHLCV> getAgg1d(Calendar day) {
+//        try {
+//            Thread.sleep(ThreadLocalRandom.current().nextLong(2000));
+//        } catch (InterruptedException e) {
+//            e.printStackTrace();
+//        }
+//        List<OHLCV> res = new ArrayList<>();
+//
+//        OHLCV agg1 = new OHLCV(day.getTimeInMillis());
+//        agg1.ticker = "AAPL";
+//        OHLCV agg2 = new OHLCV(day.getTimeInMillis());
+//        agg2.ticker = "AMD";
+//        res.add(agg1);
+//        res.add(agg2);
+//
+//        return res;
+        final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+        while(true) {
+            String url = String.format("%s/aggs/grouped/locale/US/market/STOCKS/%s?apiKey=%s",
+                    baseUrl, sdf.format(day.getTime()), apiKey);
+            String content = doRequest(url);
+            try {
+                AggResponse r = gson.fromJson(content, AggResponse.class);
+                return normalizeOHLCV("day", r.results);
+            } catch (JsonSyntaxException e) {
+                // Happens about once every 5 months that we get incomplete response
+                logger.warn(e);
+            }
         }
     }
 }

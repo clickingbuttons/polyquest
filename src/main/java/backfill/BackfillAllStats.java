@@ -4,26 +4,22 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class BackfillAllStats {
-    double symbolTradeCount = 0;
-    double tradeCount = 0;
-    public List<Long> timesElapsed = new ArrayList<>();
+    public List<BackfillRangeStats> rangeStats = new ArrayList<>();
 
     public void add(BackfillRangeStats day) {
-        symbolTradeCount += day.symbolsWithData.size();
-        tradeCount += day.curNumRows.get();
-
-        timesElapsed.add(day.timeElapsed);
+        rangeStats.add(day);
     }
 
     public String toString() {
-        long totalMs = timesElapsed.stream().mapToLong(Long::longValue).sum();
-        long averageMs = totalMs / timesElapsed.size();
+        long totalMs = rangeStats.stream().mapToLong(stat -> stat.runTime).sum();
+        long rowCount = rangeStats.stream().mapToLong(stat -> stat.numRows).sum();
 
-        return String.format("Overall stats: %d days with %f trades in %ds (%ds/day): %f trades",
-                timesElapsed.size(),
-                symbolTradeCount,
+        return String.format("Overall stats: %d ranges with %d symbols with %d rows in %ds (%ds/day)",
+                rangeStats.size(),
+                rangeStats.stream().flatMap(stat -> stat.uniqueSymbols.stream()).distinct().count(),
+                rowCount,
                 totalMs / 1000,
-                averageMs / 1000,
-                tradeCount);
+                totalMs / rangeStats.size()
+        );
     }
 }

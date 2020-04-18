@@ -1,7 +1,7 @@
-import aggregators.AggregateAllStats;
-import aggregators.AggregateDayStats;
-import aggregators.OHLCVAggregator;
-import aggregators.TradeAggregator;
+package aggregators;
+
+import backfill.BackfillRange;
+import backfill.MarketCalendar;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import polygon.models.OHLCV;
@@ -32,8 +32,8 @@ public class AggregateTradeRange {
             if (sym.compareTo(lastSym) != 0) {
                 List<OHLCV> agg1s = TradeAggregator.aggregate(dayTrades.subList(lastIndex, i), 60000000);
                 List<OHLCV> agg1m = OHLCVAggregator.aggregate(agg1s, 60000000);
-                QuestDBWriter.writeAggs(lastSym, "agg1s", agg1s);
-                QuestDBWriter.writeAggs(lastSym, "agg1m", agg1m);
+//                QuestDBWriter.writeAggs(lastSym, "agg1s", agg1s);
+//                QuestDBWriter.writeAggs(lastSym, "agg1m", agg1m);
                 lastSym = sym;
                 lastIndex = i;
                 count++;
@@ -41,7 +41,6 @@ public class AggregateTradeRange {
         }
 
         long startTime = System.currentTimeMillis();
-        QuestDBWriter.flushAggregates();
         logger.info("Flushed {} symbols in {}s", count,  (System.currentTimeMillis() - startTime) /1000 );
 
         return res;

@@ -12,28 +12,28 @@ public class BackfillRangeStats {
     String type;
     Calendar from;
     Calendar to;
-    public int numSymbols;
-    public AtomicInteger curNumSymbols = new AtomicInteger(0);
-    public AtomicInteger curNumRows = new AtomicInteger(0);
+    List<String> uniqueSymbols;
+    long flushTime;
+    long runTime;
+    long numRows;
 
-    public List<String> symbolsWithData = new ArrayList<>();
-    public long timeElapsed;
-
-    public BackfillRangeStats(String type, Calendar from, Calendar to, int numSymbols) {
+    public BackfillRangeStats(String type, Calendar from, Calendar to, long runTime, long flushTime, List<String> uniqueSymbols, long numRows) {
         this.type = type;
         this.from = (Calendar) from.clone();
         this.to = (Calendar) to.clone();
-        this.numSymbols = numSymbols;
+        this.uniqueSymbols = uniqueSymbols;
+        this.numRows = numRows;
+        this.runTime = runTime;
+        this.flushTime = flushTime;
     }
 
     public String toString() {
-        return String.format("%s to %s %s stats: %d/%d symbols with %d rows in %d seconds",
+        return String.format("Backfilled %s from %s to %s: %d symbols with %d rows in %d seconds",
+                type,
                 sdf.format(from.getTime()),
                 sdf.format(to.getTime()),
-                type,
-                symbolsWithData.size(),
-                numSymbols,
-                curNumRows.get(),
-                timeElapsed / 1000);
+                uniqueSymbols.size(),
+                numRows,
+                runTime / 1000);
     }
 }

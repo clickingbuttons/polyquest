@@ -25,7 +25,6 @@ public class QuestDBWriter {
     private final static AllowAllSecurityContextFactory securityContextFactor = new AllowAllSecurityContextFactory();
     private final static CairoSecurityContext cairoSecurityContext = securityContextFactor.getInstance("admin");
     private final static SortedSet<Trade> writeCacheTrades = new ConcurrentSkipListSet<>();
-    private final static Map<String, SortedSet<OHLCV>> writeCacheAggregates = new HashMap<>();
     private static final SqlExecutionContext sqlExecutionContext = new SqlExecutionContextImpl();
 
     private static String getPartitionType(String type) {
@@ -57,7 +56,6 @@ public class QuestDBWriter {
                         "    volume LONG, \n" +
                         "    ts TIMESTAMP\n" +
                         ") TIMESTAMP(ts) PARTITION BY %s";
-                writeCacheAggregates.put(tableName, new ConcurrentSkipListSet<>());
             }
             String createTable = String.format(query, tableName, partitionType);
             compiler.compile(createTable, sqlExecutionContext);
@@ -76,13 +74,6 @@ public class QuestDBWriter {
             t.ticker = symbol;
         }
         writeCacheTrades.addAll(trades);
-    }
-
-    public static void writeAggs(String symbol, String tableName, List<OHLCV> aggs) {
-        for (OHLCV agg : aggs) {
-            agg.ticker = symbol;
-        }
-        writeCacheAggregates.get(tableName).addAll(aggs);
     }
 
     public static void flushTrades(String tableName) {
@@ -105,24 +96,19 @@ public class QuestDBWriter {
         }
     }
 
-    public static void flushAggregates() {
-        for (String tableName : writeCacheAggregates.keySet()) {
-            Set<OHLCV> aggregates = writeCacheAggregates.get(tableName);
-            logger.info("Flushing {} {} candles", aggregates.size(), tableName);
-            try (TableWriter writer = engine.getWriter(cairoSecurityContext, tableName)) {
-                for (OHLCV agg : aggregates) {
-                    TableWriter.Row row = writer.newRow(agg.timeMicros);
-                    row.putSym(0, agg.ticker);
-                    row.putDouble(1, agg.open);
-                    row.putDouble(2, agg.high);
-                    row.putDouble(3, agg.low);
-                    row.putDouble(4, agg.close);
-                    row.putLong(5, agg.volume);
-                    row.append();
-                }
-                writer.commit();
+    public static void flushAggregates(String tableName, Collection<OHLCV> aggregates) {
+        try (TableWriter writer = engine.getWriter(cairoSecurityContext, tableName)) {
+            for (OHLCV agg : aggregates) {
+                TableWriter.Row row = writer.newRow(agg.timeMicros);
+                row.putSym(0, agg.ticker);
+                row.putDouble(1, agg.open);
+                row.putDouble(2, agg.high);
+                row.putDouble(3, agg.low);
+                row.putDouble(4, agg.close);
+                row.putLong(5, agg.volume);
+                row.append();
             }
-            aggregates.clear();
+            writer.commit();
         }
     }
 

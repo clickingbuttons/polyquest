@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.Date;
 
 public class OHLCV implements Comparable<OHLCV> {
+    @SerializedName("T")
     public String ticker;
     @SerializedName("o")
     public double open = 0;
@@ -19,6 +20,8 @@ public class OHLCV implements Comparable<OHLCV> {
     public long volume = 0;
     @SerializedName("t")
     public long timeMicros;
+    @SerializedName("n")
+    public long numTrades;
 
     public OHLCV(long t) {
         timeMicros = t;

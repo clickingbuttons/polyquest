@@ -1,3 +1,5 @@
+import aggregators.AggregateTradeRange;
+import backfill.BackfillRange;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import questdb.QuestDBReader;
@@ -13,7 +15,7 @@ public class Main {
         Calendar from = QuestDBReader.getLastTimestamp(type);
         Calendar to = new GregorianCalendar();
         to.set(Calendar.DATE, to.get(Calendar.DATE) - 2);
-        BackfillRange.backfill(type, from, to, 100);
+        BackfillRange.backfill(type, from, to);
     }
 
     private static void aggregate() {
