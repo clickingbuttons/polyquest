@@ -1,39 +1,60 @@
 package backfill;
 
+import polygon.models.OHLCV;
+
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.List;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class BackfillRangeStats {
     final static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    DateTimeFormatter idf = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+            .withZone(ZoneId.systemDefault());
 
     String type;
     Calendar from;
     Calendar to;
-    List<String> uniqueSymbols;
+    long startTime;
     long flushTime;
-    long runTime;
-    long numRows;
+    long downloadTime;
+    AtomicInteger numRows = new AtomicInteger(0);
+    Map<String, List<String>> uniqueSymbols = new ConcurrentHashMap<>();
 
-    public BackfillRangeStats(String type, Calendar from, Calendar to, long runTime, long flushTime, List<String> uniqueSymbols, long numRows) {
+    public BackfillRangeStats(String type, Calendar from, Calendar to) {
         this.type = type;
         this.from = (Calendar) from.clone();
         this.to = (Calendar) to.clone();
-        this.uniqueSymbols = uniqueSymbols;
-        this.numRows = numRows;
-        this.runTime = runTime;
-        this.flushTime = flushTime;
+        this.startTime = System.currentTimeMillis();
     }
 
     public String toString() {
-        return String.format("Backfilled %s from %s to %s: %d symbols with %d rows in %d seconds",
+        return String.format("Backfilled %s from %s to %s: %d rows in %d+%d seconds",
                 type,
                 sdf.format(from.getTime()),
                 sdf.format(to.getTime()),
-                uniqueSymbols.size(),
-                numRows,
-                runTime / 1000);
+                numRows.longValue(),
+                (downloadTime - startTime) / 1000,
+                (flushTime - downloadTime) / 1000);
+    }
+
+    public void completeRows(List<OHLCV> aggs) {
+        for (OHLCV agg : aggs) {
+            String date = idf.format(Instant.ofEpochMilli(agg.timeMicros / 1000));
+            uniqueSymbols.putIfAbsent(agg.ticker, new ArrayList<>());
+            uniqueSymbols.get(agg.ticker).add(date);
+        }
+        numRows.addAndGet(aggs.size());
+    }
+
+    public void completeDownload() {
+        this.downloadTime = System.currentTimeMillis();
+    }
+
+    public void completeFlush() {
+        this.flushTime = System.currentTimeMillis();
     }
 }

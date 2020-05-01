@@ -10,61 +10,95 @@ import questdb.QuestDBWriter;
 import java.io.*;
 import java.text.SimpleDateFormat;
 import java.time.temporal.ChronoUnit;
-import java.util.Calendar;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class BackfillRange {
     final static Logger logger = LogManager.getLogger(BackfillRange.class);
     final static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+    final static AtomicInteger agg1dCounter = new AtomicInteger(0);
+
+    public enum BackfillMethod {
+        grouped,
+        aggs
+    }
 
     @SuppressWarnings("unchecked")
-    static BackfillRangeStats backfillRange(String type, Calendar from, Calendar to) {
-        long startTime = System.currentTimeMillis();
+    static BackfillRangeStats backfillRangeGrouped(String tableName, Calendar from, Calendar to) {
+        BackfillRangeStats stats = new BackfillRangeStats(tableName, from, to);
 
-        // Use grouped market API for each day
-        if (type.equals("agg1d")) {
-            List<CompletableFuture<List<OHLCV>>> groupedDays = Stream
-                    .iterate(from, day -> {
-                        Calendar nextDay = (Calendar) day.clone();
-                        nextDay.add(Calendar.DATE, 1);
-                        return nextDay;
-                    })
-                    .limit(ChronoUnit.DAYS.between(from.toInstant(), to.toInstant()))
-                    .filter(MarketCalendar::isMarketOpen)
-                    .map(day -> CompletableFuture.supplyAsync(() -> PolygonClient.getAgg1d(day)))
+        List<CompletableFuture<List<OHLCV>>> grouped = Stream
+                .iterate(from, day -> {
+                    Calendar nextDay = (Calendar) day.clone();
+                    nextDay.add(Calendar.DATE, 1);
+                    agg1dCounter.set(0);
+                    return nextDay;
+                })
+                .limit(ChronoUnit.DAYS.between(from.toInstant(), to.toInstant()))
+                .filter(MarketCalendar::isMarketOpen)
+                .map(day -> CompletableFuture.supplyAsync(() -> {
+                    List<OHLCV> aggs = PolygonClient.getAgg1d(day);
+                    stats.completeRows(aggs);
+                    logDownloadProgress(50);
+                    return aggs;
+                }))
+                .collect(Collectors.toList());
+        logger.info("Downloading {} days", grouped.size());
+        CompletableFuture<List<OHLCV>>[] futures = grouped.toArray(new CompletableFuture[grouped.size()]);
+        return CompletableFuture.allOf(futures).thenApply(v ->
+                grouped.stream()
+                        .map(CompletableFuture::join)
+                        .flatMap(List::stream)
+            ).thenApply(aggs -> {
+                stats.completeDownload();
+                if (!tableName.isEmpty()) {
+                    logger.info("Flushing {} candles to {}", stats.numRows, tableName);
+                    QuestDBWriter.flushAggregates(tableName, aggs);
+                }
+                stats.completeFlush();
+                return stats;
+            }).join();
+    }
+
+    static void logDownloadProgress(int mod) {
+        int i = agg1dCounter.incrementAndGet();
+        if (i % mod == 0) {
+            logger.info(i);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    static BackfillRangeStats backfillRangeAggs(String tableName, Calendar from, Calendar to, List<String> tickers) {
+        BackfillRangeStats stats = new BackfillRangeStats(tableName, from, to);
+
+        if (tableName.isEmpty() || tableName.contains("agg1d")) {
+            List<CompletableFuture<List<OHLCV>>> symbolAggs = tickers.stream()
+                    .map(ticker -> CompletableFuture.supplyAsync(() -> {
+                        List<OHLCV> aggs = PolygonClient.getAggsForSymbol(from, to, "day", ticker);
+                        stats.completeRows(aggs);
+                        logDownloadProgress(500);
+                        return aggs;
+                    }))
                     .collect(Collectors.toList());
-            logger.info("Downloading {} days", groupedDays.size());
-            CompletableFuture<List<OHLCV>>[] futures = groupedDays.toArray(new CompletableFuture[groupedDays.size()]);
+            logger.info("Downloading {} tickers", symbolAggs.size());
+            CompletableFuture<List<OHLCV>>[] futures = symbolAggs.toArray(new CompletableFuture[symbolAggs.size()]);
             return CompletableFuture.allOf(futures).thenApply(v ->
-                    groupedDays.stream()
+                    symbolAggs.stream()
                             .map(CompletableFuture::join)
                             .flatMap(List::stream)
-                            .sorted((a, b) -> a.timeMicros < b.timeMicros ? 1 : 0)
-                            .collect(Collectors.toList())
-                ).thenApply(aggs -> {
-                    long startFlushTime = System.currentTimeMillis();
-                    logger.info("Flushing {} {} candles", aggs.size(), type);
-                    BackfillRangeStats stats = new BackfillRangeStats(
-                            type,
-                            from,
-                            to,
-                            System.currentTimeMillis() - startTime,
-                            System.currentTimeMillis() - startFlushTime,
-                            aggs.stream().map(agg -> agg.ticker).distinct().collect(Collectors.toList()),
-                            aggs.size());
-                    QuestDBWriter.flushAggregates(type, aggs);
-                    aggs.clear();
-                    return stats;
-                }).join();
+            ).thenApply(aggs -> {
+                stats.completeDownload();
+                if (!tableName.isEmpty()) {
+                    logger.info("Flushing {} candles to {}", stats.numRows, tableName);
+                    QuestDBWriter.flushAggregates(tableName, aggs);
+                }
+                stats.completeFlush();
+                return stats;
+            }).join();
         }
-        // Only about 1/4 of 33676 symbols have trades.
-        // The rest are just doing HTTP requests to check that there aren't any trades on that day.
-//        for (Ticker t : getAllTickers()) {
-//            tasks.add(new BackfillSymbolTask(type, from, to, t.ticker, res));
-//        }
 
         return null;
     }
@@ -97,20 +131,14 @@ public class BackfillRange {
         return res;
     }
 
-    public static boolean isBadTicker(Ticker ticker) {
-        // These don't work with Polygon most of the time anyways...
-        if (ticker.ticker.length() > 5 || ticker.ticker.matches("^.*[^a-zA-Z].*$")) {
-            return true;
-        }
-
-        return false;
-    }
-
-    private static List<Ticker> getAllTickers() {
+    private static List<Ticker> getTickers() {
         logger.info("Loading tickers...");
         List<Ticker> tickers;
         try {
             tickers = loadTickers();
+            PrintWriter out = new PrintWriter("tickers.csv");
+            out.println("ticker");
+            tickers.stream().map(t -> t.ticker).sorted().forEach(out::println);
         } catch (IOException e) {
             logger.info("Cached tickers not found.");
             logger.debug(e);
@@ -118,9 +146,6 @@ public class BackfillRange {
             tickers = PolygonClient.getTickers();
             saveTickers(tickers);
         }
-        int prevSize = tickers.size();
-        tickers.removeIf(BackfillRange::isBadTicker);
-        logger.info("Removed {} weird tickers. {} left.", prevSize - tickers.size(), tickers.size());
 
         List<String> tickerStrings = tickers
                 .stream()
@@ -146,14 +171,14 @@ public class BackfillRange {
         return tickers;
     }
 
-    public static void backfill(String type, Calendar from, Calendar to) {
+    public static void backfill(String type, Calendar from, Calendar to, BackfillMethod method) {
         // Exchange active from 4:00 - 20:00 (https://polygon.io/blog/frequently-asked-questions/)
-        // Maximum 5 trading days per week
+        // Maximum 5 trading days per week, 50000 rows per call
         int stepSize = type.equals("agg1m") ? PolygonClient.perPage * 7 / ((20 - 4) * 60 * 5) : 1;
-        int stepType = type.equals("agg1d") ? Calendar.YEAR : Calendar.DATE;
+        int stepType = Calendar.DATE;
         BackfillAllStats allStats = new BackfillAllStats();
         for (Calendar stepFrom = (Calendar) from.clone(); stepFrom.before(to); stepFrom.add(stepType, stepSize)) {
-            if (stepType == Calendar.DATE && stepSize == 1 && !MarketCalendar.isMarketOpen(stepFrom))
+            if (stepSize == 1 && !MarketCalendar.isMarketOpen(stepFrom))
                 continue;
             Calendar stepTo = (Calendar) stepFrom.clone();
             stepTo.add(stepType, stepSize);
@@ -165,11 +190,42 @@ public class BackfillRange {
                     sdf.format(stepFrom.getTime()),
                     sdf.format(stepTo.getTime()));
 
-            BackfillRangeStats dayStats = backfillRange(type, stepFrom, stepTo);
+//            BackfillRangeStats dayStats = backfillRangeAggs(type, stepFrom, stepTo);
+//            allStats.add(dayStats);
+//            logger.info(dayStats);
+        }
+        logger.info(allStats);
+    }
+
+    public static BackfillAllStats backfillIndex(Calendar from, Calendar to, BackfillMethod method, String tableName) {
+        BackfillAllStats allStats = new BackfillAllStats();
+        List<String> tickers = method == BackfillMethod.aggs
+                ? getTickers().stream().map(ticker -> ticker.ticker).collect(Collectors.toList())
+                : null;
+        // At maximum, 5 / 7 days are trading days
+        int stepSize = method == BackfillMethod.aggs ? PolygonClient.perPage * 7 / 5 : 1;
+        int stepType = method == BackfillMethod.aggs ? Calendar.DATE : Calendar.YEAR;
+
+        for (Calendar stepFrom = (Calendar) from.clone(); stepFrom.before(to); stepFrom.add(stepType, stepSize)) {
+            Calendar stepTo = (Calendar) stepFrom.clone();
+            stepTo.add(stepType, stepSize);
+            if (stepTo.after(to)) {
+                stepTo = (Calendar) to.clone();
+            }
+
+            logger.info("Backfilling {} from {} to {}",
+                    tableName,
+                    sdf.format(stepFrom.getTime()),
+                    sdf.format(stepTo.getTime()));
+
+            BackfillRangeStats dayStats= method == BackfillMethod.aggs
+                    ? backfillRangeAggs(tableName, stepFrom, stepTo, tickers)
+                    : backfillRangeGrouped(tableName, stepFrom, stepTo);
 
             allStats.add(dayStats);
             logger.info(dayStats);
         }
         logger.info(allStats);
+        return allStats;
     }
 }

@@ -20,8 +20,6 @@ public class OHLCV implements Comparable<OHLCV> {
     public long volume = 0;
     @SerializedName("t")
     public long timeMicros;
-    @SerializedName("n")
-    public long numTrades;
 
     public OHLCV(long t) {
         timeMicros = t;
@@ -41,9 +39,12 @@ public class OHLCV implements Comparable<OHLCV> {
     @Override
     public int compareTo(OHLCV o2) {
         // Can't return 0 if equal because used in Set
-        if (o2.timeMicros >= timeMicros) {
+        if (timeMicros > o2.timeMicros) {
+            return 1;
+        }
+        else if (timeMicros < o2.timeMicros) {
             return -1;
         }
-        return 1;
+        return 0;
     }
 }

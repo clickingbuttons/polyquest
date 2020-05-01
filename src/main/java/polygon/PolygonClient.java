@@ -105,21 +105,35 @@ public class PolygonClient {
             String url = String.format("%s/aggs/ticker/%s/range/1/%s/%s/%s?apiKey=%s",
                     baseUrl, symbol, type, sdf.format(from.getTime()), sdf.format(to.getTime()), apiKey);
             String content = doRequest(url);
-            if (content == null) {
-                return new ArrayList<>();
-            }
             try {
                 AggResponse r = gson.fromJson(content, AggResponse.class);
-                return normalizeOHLCV(type, r.results);
+                if (r == null) {
+                    logger.warn("null response from {}", url);
+                    continue;
+                }
+                else if (r.results == null) {
+                    return new ArrayList<>();
+                }
+                return normalizeOHLCV(type, r.results, symbol);
             } catch (JsonSyntaxException e) {
-                // Happens about once every 5 months that we get incomplete response
-                logger.warn(e);
+                // Occasionally Polygon will do something stupid like give us this for GGE: {
+                //      "T":"X:BTCUSD",
+                //      "v":516831.5165334968,
+                //      "vw":17.1859,
+                //      "o":7821.73,
+                //      "c":17.251,
+                //      "h":8988,
+                //      "l":17.015,
+                //      "t":1305518400000,
+                //      "n":1
+                // }
+                logger.warn("bad JSON from {}:\n {}\n{}", url, e, content.substring(0, content.indexOf(",{")));
             }
         }
     }
 
     public static List<Ticker> getTickers() {
-        List<Ticker> tickers = new ArrayList<>();
+        List<Ticker> tickers = new ArrayList<>(36000);
 
         int perPage = 50;
         for (int page = 1;; page++) {
@@ -135,11 +149,11 @@ public class PolygonClient {
         }
     }
 
-    private static List<OHLCV> normalizeOHLCV(String type, List<OHLCV> aggs) {
-        if (aggs == null) {
-            return new ArrayList<>();
-        }
+    private static List<OHLCV> normalizeOHLCV(String type, List<OHLCV> aggs, String ticker) {
         for (OHLCV candle : aggs) {
+            if (ticker != null) {
+                candle.ticker = ticker;
+            }
             // Polygon returns UDT milliseconds for agg data. We save in EST microseconds
             candle.timeMicros *= 1000;
             if (type.equals("day")) {
@@ -154,22 +168,8 @@ public class PolygonClient {
         return aggs;
     }
 
+    // This endpoint returns some weird tickers we don't want
     public static List<OHLCV> getAgg1d(Calendar day) {
-//        try {
-//            Thread.sleep(ThreadLocalRandom.current().nextLong(2000));
-//        } catch (InterruptedException e) {
-//            e.printStackTrace();
-//        }
-//        List<OHLCV> res = new ArrayList<>();
-//
-//        OHLCV agg1 = new OHLCV(day.getTimeInMillis());
-//        agg1.ticker = "AAPL";
-//        OHLCV agg2 = new OHLCV(day.getTimeInMillis());
-//        agg2.ticker = "AMD";
-//        res.add(agg1);
-//        res.add(agg2);
-//
-//        return res;
         final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 
         while(true) {
@@ -178,10 +178,13 @@ public class PolygonClient {
             String content = doRequest(url);
             try {
                 AggResponse r = gson.fromJson(content, AggResponse.class);
-                return normalizeOHLCV("day", r.results);
+                if (r == null || r.results == null) {
+                    logger.warn("null response from {}", url);
+                    continue;
+                }
+                return normalizeOHLCV("day", r.results, null);
             } catch (JsonSyntaxException e) {
-                // Happens about once every 5 months that we get incomplete response
-                logger.warn(e);
+                logger.warn("bad JSON from {}:\n {}\n{}", url, e, content.substring(0, content.indexOf(",{")));
             }
         }
     }

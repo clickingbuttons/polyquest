@@ -10,12 +10,19 @@ import java.util.*;
 public class Main {
     final static Logger logger = LogManager.getLogger(Main.class);
 
-    private static void backfill(String type) {
-        QuestDBWriter.createTable(type);
-        Calendar from = QuestDBReader.getLastTimestamp(type);
+    private static void backfillAgg1d(BackfillRange.BackfillMethod method) {
+        String type = "agg1d";
+        String tableName = type + "_" + method.name();
+        QuestDBWriter.createTable(tableName);
+        Calendar from = QuestDBReader.getLastTimestamp(tableName);
         Calendar to = new GregorianCalendar();
         to.set(Calendar.DATE, to.get(Calendar.DATE) - 2);
-        BackfillRange.backfill(type, from, to);
+        BackfillRange.backfillIndex(from, to, method, tableName);
+    }
+
+    private static void backfillIndex() {
+        backfillAgg1d(BackfillRange.BackfillMethod.grouped);
+        backfillAgg1d(BackfillRange.BackfillMethod.aggs);
     }
 
     private static void aggregate() {
@@ -45,7 +52,8 @@ public class Main {
             if (args.length < 2) {
                 printUsage();
             }
-            backfill(args[1]);
+            backfillIndex();
+//            backfill(args[1]);
         }
         else if (args[0].equals("aggregate")) {
             aggregate();

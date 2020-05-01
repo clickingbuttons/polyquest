@@ -22,7 +22,7 @@ public class QuestDBReader {
     private final static CairoSecurityContext cairoSecurityContext = securityContextFactor.getInstance("admin");
     private final static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
     // Start of Polygon.io data
-    private final static Calendar polygonStart = new GregorianCalendar(2004, Calendar.JANUARY, 1);
+    public final static Calendar polygonStart = new GregorianCalendar(2004, Calendar.JANUARY, 1);
     private static final SqlExecutionContext sqlExecutionContext = new SqlExecutionContextImpl();
 
     public static Calendar getLastTimestamp(String tableName) {
