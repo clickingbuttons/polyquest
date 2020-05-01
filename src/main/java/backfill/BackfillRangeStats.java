@@ -5,6 +5,7 @@ import polygon.models.OHLCV;
 import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -13,7 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class BackfillRangeStats {
     final static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
     DateTimeFormatter idf = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-            .withZone(ZoneId.systemDefault());
+            .withZone(ZoneId.of("US/Eastern"));
 
     String type;
     Calendar from;

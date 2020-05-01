@@ -30,28 +30,30 @@ public class BackfillRange {
     static BackfillRangeStats backfillRangeGrouped(String tableName, Calendar from, Calendar to) {
         BackfillRangeStats stats = new BackfillRangeStats(tableName, from, to);
 
-        List<CompletableFuture<List<OHLCV>>> grouped = Stream
-                .iterate(from, day -> {
-                    Calendar nextDay = (Calendar) day.clone();
-                    nextDay.add(Calendar.DATE, 1);
-                    agg1dCounter.set(0);
-                    return nextDay;
-                })
-                .limit(ChronoUnit.DAYS.between(from.toInstant(), to.toInstant()))
-                .filter(MarketCalendar::isMarketOpen)
-                .map(day -> CompletableFuture.supplyAsync(() -> {
-                    List<OHLCV> aggs = PolygonClient.getAgg1d(day);
-                    stats.completeRows(aggs);
-                    logDownloadProgress(50);
-                    return aggs;
-                }))
-                .collect(Collectors.toList());
-        logger.info("Downloading {} days", grouped.size());
-        CompletableFuture<List<OHLCV>>[] futures = grouped.toArray(new CompletableFuture[grouped.size()]);
+        List<Calendar> marketDays = new ArrayList<>();
+        for (Calendar day = (Calendar) from.clone(); day.before(to) || day.equals(to); day.add(Calendar.DATE, 1)) {
+            if (!MarketCalendar.isMarketOpen(day))
+                continue;
+            marketDays.add((Calendar) day.clone());
+        }
+        logger.info("Downloading {} days", marketDays.size());
+        agg1dCounter.set(0);
+        CompletableFuture<List<OHLCV>>[] futures = new CompletableFuture[marketDays.size()];
+        for (int i = 0; i < futures.length; i++) {
+            final Calendar marketDay = marketDays.get(i);
+            futures[i] = CompletableFuture.supplyAsync(() -> {
+                List<OHLCV> aggs = PolygonClient.getAgg1d(marketDay);
+                stats.completeRows(aggs);
+                logDownloadProgress(50);
+                return aggs;
+            });
+        }
+
         return CompletableFuture.allOf(futures).thenApply(v ->
-                grouped.stream()
-                        .map(CompletableFuture::join)
-                        .flatMap(List::stream)
+                Arrays.stream(futures)
+                    .map(CompletableFuture::join)
+                    .flatMap(List::stream)
+                    .filter(agg -> isValidTicker(agg.ticker, tableName))
             ).thenApply(aggs -> {
                 stats.completeDownload();
                 if (!tableName.isEmpty()) {
@@ -75,20 +77,21 @@ public class BackfillRange {
         BackfillRangeStats stats = new BackfillRangeStats(tableName, from, to);
 
         if (tableName.isEmpty() || tableName.contains("agg1d")) {
-            List<CompletableFuture<List<OHLCV>>> symbolAggs = tickers.stream()
-                    .map(ticker -> CompletableFuture.supplyAsync(() -> {
-                        List<OHLCV> aggs = PolygonClient.getAggsForSymbol(from, to, "day", ticker);
-                        stats.completeRows(aggs);
-                        logDownloadProgress(500);
-                        return aggs;
-                    }))
-                    .collect(Collectors.toList());
-            logger.info("Downloading {} tickers", symbolAggs.size());
-            CompletableFuture<List<OHLCV>>[] futures = symbolAggs.toArray(new CompletableFuture[symbolAggs.size()]);
+            logger.info("Downloading {} tickers", tickers.size());
+            CompletableFuture<List<OHLCV>>[] futures = new CompletableFuture[tickers.size()];
+            for (int i = 0; i < futures.length; i++) {
+                final String ticker = tickers.get(i);
+                futures[i] = CompletableFuture.supplyAsync(() -> {
+                    List<OHLCV> aggs = PolygonClient.getAggsForSymbol(from, to, "day", ticker);
+                    stats.completeRows(aggs);
+                    logDownloadProgress(500);
+                    return aggs;
+                });
+            }
             return CompletableFuture.allOf(futures).thenApply(v ->
-                    symbolAggs.stream()
-                            .map(CompletableFuture::join)
-                            .flatMap(List::stream)
+                    Arrays.stream(futures)
+                        .map(CompletableFuture::join)
+                        .flatMap(List::stream)
             ).thenApply(aggs -> {
                 stats.completeDownload();
                 if (!tableName.isEmpty()) {
@@ -101,6 +104,11 @@ public class BackfillRange {
         }
 
         return null;
+    }
+
+    static boolean isValidTicker(String ticker, String tableName) {
+        // For Jack, don't filter tickers
+        return tableName.isEmpty() || ticker.matches("\\A\\p{ASCII}*\\z") && ticker.length() <= 15;
     }
 
     public static void saveTickers(List<Ticker> tickers) {
@@ -197,10 +205,23 @@ public class BackfillRange {
         logger.info(allStats);
     }
 
+    public static void roundDownToDay(Calendar c) {
+        c.set(Calendar.HOUR_OF_DAY, 0);
+        c.set(Calendar.MINUTE, 0);
+        c.set(Calendar.SECOND, 0);
+        c.set(Calendar.MILLISECOND, 0);
+    }
+
     public static BackfillAllStats backfillIndex(Calendar from, Calendar to, BackfillMethod method, String tableName) {
+        // We're always backfilling DAYS, so align from and to to nearest days
+        roundDownToDay(from);
+        roundDownToDay(to);
         BackfillAllStats allStats = new BackfillAllStats();
         List<String> tickers = method == BackfillMethod.aggs
-                ? getTickers().stream().map(ticker -> ticker.ticker).collect(Collectors.toList())
+                ? getTickers().stream()
+                    .map(ticker -> ticker.ticker)
+                    .filter(ticker -> isValidTicker(ticker, tableName))
+                    .collect(Collectors.toList())
                 : null;
         // At maximum, 5 / 7 days are trading days
         int stepSize = method == BackfillMethod.aggs ? PolygonClient.perPage * 7 / 5 : 1;

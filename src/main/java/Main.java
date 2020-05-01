@@ -1,4 +1,5 @@
 import aggregators.AggregateTradeRange;
+import backfill.BackfillAllStats;
 import backfill.BackfillRange;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -15,9 +16,12 @@ public class Main {
         String tableName = type + "_" + method.name();
         QuestDBWriter.createTable(tableName);
         Calendar from = QuestDBReader.getLastTimestamp(tableName);
+        from.add(Calendar.DATE, 1);
         Calendar to = new GregorianCalendar();
-        to.set(Calendar.DATE, to.get(Calendar.DATE) - 2);
-        BackfillRange.backfillIndex(from, to, method, tableName);
+        to.add(Calendar.DATE, -1);
+        BackfillAllStats aggStats = BackfillRange.backfillIndex(from, to, method, tableName);
+        aggStats.writeSymbols(tableName + ".csv");
+        aggStats.writeJSON(tableName + ".json");
     }
 
     private static void backfillIndex() {

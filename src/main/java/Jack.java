@@ -9,6 +9,7 @@ public class Jack {
     public static void main(String args[]) {
         Calendar from = QuestDBReader.polygonStart;
         Calendar to = new GregorianCalendar();
+        to.add(Calendar.DATE, -1);
 //        Calendar from = new GregorianCalendar(2004, Calendar.JANUARY, 1);
 //        Calendar to = new GregorianCalendar(2005, Calendar.JANUARY, 1);
         BackfillAllStats aggStats = BackfillRange.backfillIndex(from, to, BackfillRange.BackfillMethod.aggs, "");

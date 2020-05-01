@@ -17,8 +17,6 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
-import java.util.Random;
-import java.util.concurrent.ThreadLocalRandom;
 
 public class PolygonClient {
     static String baseUrl = "https://api.polygon.io/v2";
@@ -127,7 +125,8 @@ public class PolygonClient {
                 //      "t":1305518400000,
                 //      "n":1
                 // }
-                logger.warn("bad JSON from {}:\n {}\n{}", url, e, content.substring(0, content.indexOf(",{")));
+                int printUntil = content.contains(",{") ? content.indexOf(",{") : content.length();
+                logger.warn("bad JSON from {}:\n {}\n{}", url, e, content.substring(0, printUntil));
             }
         }
     }

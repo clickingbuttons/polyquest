@@ -34,10 +34,6 @@ public class QuestDBReader {
         if (tableMicros > startMicros) {
             // We store data in EST, add 5 hours for GMT
             res.setTime(new Date(tableMicros / 1000 + (24 - 5) * 60 * 60 * 1000));
-            res.set(Calendar.HOUR_OF_DAY, 0);
-            res.set(Calendar.MINUTE, 0);
-            res.set(Calendar.SECOND, 0);
-            res.set(Calendar.MILLISECOND, 0);
         }
 
         return res;

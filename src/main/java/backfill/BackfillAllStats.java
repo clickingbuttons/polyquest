@@ -24,12 +24,11 @@ public class BackfillAllStats {
         long totalMs = rangeStats.stream().mapToLong(stat -> stat.flushTime - stat.startTime).sum();
         long rowCount = rangeStats.stream().mapToLong(stat -> stat.numRows.longValue()).sum();
 
-        return String.format("Overall stats: %d ranges with %d symbols with %d rows in %ds (%ds/day)",
+        return String.format("Overall stats: %d ranges with %d symbols with %d rows in %ds",
                 rangeStats.size(),
                 uniqueSymbols.size(),
                 rowCount,
-                totalMs / 1000,
-                totalMs / rangeStats.size()
+                totalMs / 1000
         );
     }
 
