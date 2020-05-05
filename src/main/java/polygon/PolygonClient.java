@@ -167,7 +167,6 @@ public class PolygonClient {
         return aggs;
     }
 
-    // This endpoint returns some weird tickers we don't want
     public static List<OHLCV> getAgg1d(Calendar day) {
         final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
 
@@ -178,7 +177,7 @@ public class PolygonClient {
             try {
                 AggResponse r = gson.fromJson(content, AggResponse.class);
                 if (r == null || r.results == null) {
-                    logger.warn("null response from {}", url);
+                    logger.warn("null response from {}:\n{}", url, content);
                     continue;
                 }
                 return normalizeOHLCV("day", r.results, null);

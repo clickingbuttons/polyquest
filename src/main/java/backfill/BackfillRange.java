@@ -43,6 +43,7 @@ public class BackfillRange {
             final Calendar marketDay = marketDays.get(i);
             futures[i] = CompletableFuture.supplyAsync(() -> {
                 List<OHLCV> aggs = PolygonClient.getAgg1d(marketDay);
+                aggs.removeIf(agg -> !isValidTicker(agg.ticker, tableName));
                 stats.completeRows(aggs);
                 logDownloadProgress(50);
                 return aggs;
@@ -108,7 +109,7 @@ public class BackfillRange {
 
     static boolean isValidTicker(String ticker, String tableName) {
         // For Jack, don't filter tickers
-        return tableName.isEmpty() || ticker.matches("\\A\\p{ASCII}*\\z") && ticker.length() <= 15;
+        return tableName.isEmpty() || ticker.matches("\\A[A-Za-z.-]+\\z") && ticker.length() <= 15;
     }
 
     public static void saveTickers(List<Ticker> tickers) {
@@ -139,20 +140,25 @@ public class BackfillRange {
         return res;
     }
 
-    private static List<Ticker> getTickers() {
+    public static List<Ticker> getTickers() {
         logger.info("Loading tickers...");
         List<Ticker> tickers;
         try {
             tickers = loadTickers();
-            PrintWriter out = new PrintWriter("tickers.csv");
-            out.println("ticker");
-            tickers.stream().map(t -> t.ticker).sorted().forEach(out::println);
         } catch (IOException e) {
             logger.info("Cached tickers not found.");
             logger.debug(e);
             logger.info("Downloading tickers...");
             tickers = PolygonClient.getTickers();
             saveTickers(tickers);
+        }
+
+        try {
+            PrintWriter out = new PrintWriter("tickers.csv");
+            out.println("ticker");
+            tickers.stream().map(t -> t.ticker).sorted().forEach(out::println);
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
         }
 
         List<String> tickerStrings = tickers

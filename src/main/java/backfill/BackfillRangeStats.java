@@ -4,17 +4,12 @@ import polygon.models.OHLCV;
 
 import java.text.SimpleDateFormat;
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class BackfillRangeStats {
     final static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-    DateTimeFormatter idf = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-            .withZone(ZoneId.of("US/Eastern"));
 
     String type;
     Calendar from;
@@ -44,7 +39,7 @@ public class BackfillRangeStats {
 
     public void completeRows(List<OHLCV> aggs) {
         for (OHLCV agg : aggs) {
-            String date = idf.format(Instant.ofEpochMilli(agg.timeMicros / 1000));
+            String date = Instant.ofEpochMilli(agg.timeMicros / 1000).toString().substring(0, 10);
             uniqueSymbols.putIfAbsent(agg.ticker, new ArrayList<>());
             uniqueSymbols.get(agg.ticker).add(date);
         }
