@@ -25,3 +25,5 @@ out/
 
 # Saved list of tickers
 *.bin
+*.csv
+*.json

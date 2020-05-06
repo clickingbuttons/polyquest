@@ -153,33 +153,34 @@ public class BackfillRange {
             saveTickers(tickers);
         }
 
-        try {
-            PrintWriter out = new PrintWriter("tickers.csv");
-            out.println("ticker");
-            tickers.stream().map(t -> t.ticker).sorted().forEach(out::println);
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
-
         List<String> tickerStrings = tickers
                 .stream()
                 .map(ticker -> ticker.ticker)
                 .sorted()
                 .collect(Collectors.toList());
 
-        String lastTicker = "";
-        for (String ticker : tickerStrings) {
-            if (lastTicker.compareTo(ticker) == 0) {
-                System.err.println("Duplicate ticker: " + ticker);
-                System.err.println("Delete tickers.bin and fix duplicate tickers");
-                System.exit(1);
+        // Validate tickers and write to file
+        try {
+            PrintWriter out = new PrintWriter("tickers.csv");
+            out.println("ticker");
+            String lastTicker = "";
+            for (String ticker : tickerStrings) {
+                if (lastTicker.compareTo(ticker) == 0) {
+                    System.err.println("Duplicate ticker: " + ticker);
+                    System.err.println("Delete tickers.bin and fix duplicate tickers");
+                    System.exit(1);
+                }
+                if (ticker.isEmpty()) {
+                    System.err.println("Empty ticker: " + ticker);
+                    System.err.println("Delete tickers.bin and fix duplicate tickers");
+                    System.exit(1);
+                }
+                lastTicker = ticker;
+                out.println(ticker);
             }
-            if (ticker.isEmpty()) {
-                System.err.println("Empty ticker: " + ticker);
-                System.err.println("Delete tickers.bin and fix duplicate tickers");
-                System.exit(1);
-            }
-            lastTicker = ticker;
+            out.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
         }
 
         return tickers;

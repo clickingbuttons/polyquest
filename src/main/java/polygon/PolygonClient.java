@@ -112,7 +112,10 @@ public class PolygonClient {
                 else if (r.results == null) {
                     return new ArrayList<>();
                 }
-                return normalizeOHLCV(type, r.results, symbol);
+                else if (!r.ticker.equals(symbol)) {
+                    logger.warn("requested symbol {} but got ticker {}", symbol, r.ticker);
+                }
+                return normalizeOHLCV(type, r.results, r.ticker);
             } catch (JsonSyntaxException e) {
                 // Occasionally Polygon will do something stupid like give us this for GGE: {
                 //      "T":"X:BTCUSD",
@@ -132,13 +135,14 @@ public class PolygonClient {
     }
 
     public static List<Ticker> getTickers() {
-        List<Ticker> tickers = new ArrayList<>(36000);
+        // 65536
+        List<Ticker> tickers = new ArrayList<>(1 << 16);
 
         int perPage = 50;
         for (int page = 1;; page++) {
             String url = String.format("%s/reference/tickers?apiKey=%s&sort=ticker&market=stocks&perpage=%d&page=%d",
                     baseUrl, apiKey, perPage, page);
-            logger.info("Downloading tickers {} / 35113+", (page - 1) * 50);
+            logger.info("Downloading tickers {} / 35259+", (page - 1) * 50);
             String content = doRequest(url);
             TickerResponse r = gson.fromJson(content, TickerResponse.class);
             tickers.addAll(r.tickers);
