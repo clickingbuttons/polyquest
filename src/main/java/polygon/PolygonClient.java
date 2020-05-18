@@ -142,7 +142,7 @@ public class PolygonClient {
         for (int page = 1;; page++) {
             String url = String.format("%s/reference/tickers?apiKey=%s&sort=ticker&market=stocks&perpage=%d&page=%d",
                     baseUrl, apiKey, perPage, page);
-            logger.info("Downloading tickers {} / 35259+", (page - 1) * 50);
+            logger.info("Downloading reference tickers {} / 35259+", (page - 1) * 50);
             String content = doRequest(url);
             TickerResponse r = gson.fromJson(content, TickerResponse.class);
             tickers.addAll(r.tickers);
