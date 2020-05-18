@@ -134,6 +134,69 @@ public class PolygonClient {
         }
     }
 
+    public static List<Split> getSplitsForSymbol(String symbol) {
+        while(true) {
+            String url = String.format("%s/reference/splits/%s?apiKey=%s",
+                    baseUrl, symbol, apiKey);
+            String content = doRequest(url);
+            try {
+                SplitResponse r = gson.fromJson(content, SplitResponse.class);
+                if (r == null) {
+                    logger.warn("null response from {}", url);
+                    continue;
+                }
+                else if (r.count != r.results.size()) {
+                    logger.warn("response says count={} but got results.size()={}", r.count, r.results.size());
+                }
+                return r.results;
+            } catch (JsonSyntaxException e) {
+                int printUntil = content.contains(",{") ? content.indexOf(",{") : content.length();
+                logger.warn("bad JSON from {}:\n {}\n{}", url, e, content.substring(0, printUntil));
+            }
+        }
+    }
+
+    public static List<Dividend> getDividendsForSymbol(String symbol) {
+        while(true) {
+            String url = String.format("%s/reference/dividends/%s?apiKey=%s",
+                    baseUrl, symbol, apiKey);
+            String content = doRequest(url);
+            try {
+                DividendResponse r = gson.fromJson(content, DividendResponse.class);
+                if (r == null) {
+                    logger.warn("null response from {}", url);
+                    continue;
+                }
+                else if (r.count != r.results.size()) {
+                    logger.warn("response says count={} but got results.size()={}", r.count, r.results.size());
+                }
+                return r.results;
+            } catch (JsonSyntaxException e) {
+                int printUntil = content.contains(",{") ? content.indexOf(",{") : content.length();
+                logger.warn("bad JSON from {}:\n {}\n{}", url, e, content.substring(0, printUntil));
+            }
+        }
+    }
+
+    public static List<Financial> getFinancialsForSymbol(String symbol) {
+        while(true) {
+            String url = String.format("%s/reference/financials/%s?apiKey=%s",
+                    baseUrl, symbol, apiKey);
+            String content = doRequest(url);
+            try {
+                FinancialResponse r = gson.fromJson(content, FinancialResponse.class);
+                if (r == null) {
+                    logger.warn("null response from {}", url);
+                    continue;
+                }
+                return r.results;
+            } catch (JsonSyntaxException e) {
+                int printUntil = content.contains(",{") ? content.indexOf(",{") : content.length();
+                logger.warn("bad JSON from {}:\n {}\n{}", url, e, content.substring(0, printUntil));
+            }
+        }
+    }
+
     public static List<Ticker> getTickers() {
         // 65536
         List<Ticker> tickers = new ArrayList<>(1 << 16);
