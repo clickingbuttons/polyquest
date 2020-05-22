@@ -11,22 +11,22 @@ import java.util.*;
 public class Main {
     final static Logger logger = LogManager.getLogger(Main.class);
 
-    private static void backfillAgg1d(BackfillRange.BackfillMethod method) {
-        String type = "agg1d";
-        String tableName = type + "_" + method.name();
+    private static void backfillAgg1d(BackfillRange.BackfillMethod method, String tableName) {
         QuestDBWriter.createTable(tableName);
         Calendar from = QuestDBReader.getLastTimestamp(tableName);
         from.add(Calendar.DATE, 1);
         Calendar to = new GregorianCalendar();
         to.add(Calendar.DATE, -1);
-        BackfillAllStats aggStats = BackfillRange.backfillIndex(from, to, method, tableName);
+        BackfillAllStats aggStats = BackfillRange.backfill1d(from, to, method, tableName);
         aggStats.writeSymbols(tableName + ".csv");
         aggStats.writeJSON(tableName + ".json");
     }
 
     private static void backfillIndex() {
-        backfillAgg1d(BackfillRange.BackfillMethod.grouped);
-        backfillAgg1d(BackfillRange.BackfillMethod.aggs);
+//        backfillAgg1d(BackfillRange.BackfillMethod.grouped, "agg1d");
+        backfillAgg1d(BackfillRange.BackfillMethod.dividends, "dividends");
+        backfillAgg1d(BackfillRange.BackfillMethod.splits, "splits");
+//        backfillAgg1d(BackfillRange.BackfillMethod.aggs, "agg1d_aggs");
     }
 
     private static void aggregate() {

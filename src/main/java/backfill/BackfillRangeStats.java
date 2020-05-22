@@ -1,6 +1,8 @@
 package backfill;
 
+import polygon.models.Dividend;
 import polygon.models.OHLCV;
+import polygon.models.Split;
 
 import java.text.SimpleDateFormat;
 import java.time.Instant;
@@ -37,13 +39,29 @@ public class BackfillRangeStats {
                 (flushTime - downloadTime) / 1000);
     }
 
-    public void completeRows(List<OHLCV> aggs) {
+    public void completeAggs(List<OHLCV> aggs) {
         for (OHLCV agg : aggs) {
             String date = Instant.ofEpochMilli(agg.timeMicros / 1000).toString().substring(0, 10);
             uniqueSymbols.putIfAbsent(agg.ticker, new ArrayList<>());
             uniqueSymbols.get(agg.ticker).add(date);
         }
         numRows.addAndGet(aggs.size());
+    }
+
+    public void completeDividends(List<Dividend> dividend) {
+        for (Dividend div : dividend) {
+            uniqueSymbols.putIfAbsent(div.ticker, new ArrayList<>());
+            uniqueSymbols.get(div.ticker).add(div.exDate);
+        }
+        numRows.addAndGet(dividend.size());
+    }
+
+    public void completeSplits(List<Split> splits) {
+        for (Split s : splits) {
+            uniqueSymbols.putIfAbsent(s.ticker, new ArrayList<>());
+            uniqueSymbols.get(s.ticker).add(s.exDate);
+        }
+        numRows.addAndGet(splits.size());
     }
 
     public void completeDownload() {

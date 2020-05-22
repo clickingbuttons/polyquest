@@ -86,6 +86,24 @@ public class QuestDBReader {
         return res;
     }
 
+    public static List<String> getTickers() {
+        List<String> res = new ArrayList<>();
+        CairoEngine engine = new CairoEngine(configuration);
+        SqlCompiler compiler = new SqlCompiler(engine);
+        String query = "select distinct sym from agg1d";
+        try (RecordCursor cursor = compiler.compile(query, sqlExecutionContext).getRecordCursorFactory().getCursor(sqlExecutionContext)) {
+            Record record = cursor.getRecord();
+            while (cursor.hasNext()) {
+                res.add(record.getSym(0).toString());
+            }
+        } catch (SqlException e) {
+            e.printStackTrace();
+            System.exit(-1);
+        }
+
+        return res;
+    }
+
     public static void close() {
         engine.close();
     }
