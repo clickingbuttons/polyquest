@@ -3,22 +3,16 @@ package backfill;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import polygon.PolygonClient;
-import polygon.models.Dividend;
-import polygon.models.OHLCV;
-import polygon.models.Split;
-import polygon.models.Ticker;
+import polygon.models.*;
 import questdb.QuestDBReader;
 import questdb.QuestDBWriter;
 
 import java.io.*;
 import java.text.SimpleDateFormat;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class BackfillRange {
     final static Logger logger = LogManager.getLogger(BackfillRange.class);
@@ -51,7 +45,7 @@ public class BackfillRange {
             futures[i] = CompletableFuture.supplyAsync(() -> {
                 List<OHLCV> aggs = PolygonClient.getAgg1d(marketDay);
                 aggs.removeIf(agg -> !isValidTicker(agg.ticker, tableName));
-                stats.completeAggs(aggs);
+                stats.completeDateFinancials(aggs);
                 logDownloadProgress(50);
                 return aggs;
             });
@@ -81,89 +75,49 @@ public class BackfillRange {
     }
 
     @SuppressWarnings("unchecked")
-    static BackfillRangeStats backfillRangeAggs(String tableName, Calendar from, Calendar to, List<String> tickers) {
+    static BackfillRangeStats backfillRangeByTicker(
+            String tableName,
+            Calendar from,
+            Calendar to,
+            List<String> tickers,
+            BackfillMethod method
+    ) {
         BackfillRangeStats stats = new BackfillRangeStats(tableName, from, to);
 
         logger.info("Downloading {} tickers", tickers.size());
-        CompletableFuture<List<OHLCV>>[] futures = new CompletableFuture[tickers.size()];
+        agg1dCounter.set(0);
+        CompletableFuture<List<? extends DateFinancial>>[] futures = new CompletableFuture[tickers.size()];
         for (int i = 0; i < futures.length; i++) {
             final String ticker = tickers.get(i);
             futures[i] = CompletableFuture.supplyAsync(() -> {
-                List<OHLCV> aggs = PolygonClient.getAggsForSymbol(from, to, "day", ticker);
-                stats.completeAggs(aggs);
+                List<? extends DateFinancial> dateFinancials = null;
+                if (method == BackfillMethod.aggs) {
+                    dateFinancials = PolygonClient.getAggsForSymbol(from, to, "day", ticker);
+                } else if (method == BackfillMethod.dividends) {
+                    dateFinancials = PolygonClient.getDividendsForSymbol(ticker);
+                } else if (method == BackfillMethod.splits) {
+                    dateFinancials = PolygonClient.getSplitsForSymbol(ticker);
+                }
+                stats.completeDateFinancials(dateFinancials);
                 logDownloadProgress(500);
-                return aggs;
+                return dateFinancials;
             });
         }
         return CompletableFuture.allOf(futures).thenApply(v ->
                 Arrays.stream(futures)
                     .map(CompletableFuture::join)
                     .flatMap(List::stream)
-        ).thenApply(aggs -> {
+        ).thenApply(dateFinancials -> {
             stats.completeDownload();
             if (!tableName.isEmpty()) {
                 logger.info("Flushing {} candles to {}", stats.numRows, tableName);
-                QuestDBWriter.flushAggregates(tableName, aggs);
-            }
-            stats.completeFlush();
-            return stats;
-        }).join();
-    }
-
-    @SuppressWarnings("unchecked")
-    static BackfillRangeStats backfillRangeDividends(String tableName, Calendar from, Calendar to, List<String> tickers) {
-        BackfillRangeStats stats = new BackfillRangeStats(tableName, from, to);
-
-        logger.info("Downloading {} tickers", tickers.size());
-        CompletableFuture<List<Dividend>>[] futures = new CompletableFuture[tickers.size()];
-        for (int i = 0; i < futures.length; i++) {
-            final String ticker = tickers.get(i);
-            futures[i] = CompletableFuture.supplyAsync(() -> {
-                List<Dividend> dividends = PolygonClient.getDividendsForSymbol(ticker);
-                stats.completeDividends(dividends);
-                logDownloadProgress(500);
-                return dividends;
-            });
-        }
-        return CompletableFuture.allOf(futures).thenApply(v ->
-                Arrays.stream(futures)
-                        .map(CompletableFuture::join)
-                        .flatMap(List::stream)
-        ).thenApply(aggs -> {
-            stats.completeDownload();
-            if (!tableName.isEmpty()) {
-                logger.info("Flushing {} candles to {}", stats.numRows, tableName);
-                QuestDBWriter.flushDividends(tableName, aggs);
-            }
-            stats.completeFlush();
-            return stats;
-        }).join();
-    }
-
-    @SuppressWarnings("unchecked")
-    static BackfillRangeStats backfillRangeSplits(String tableName, Calendar from, Calendar to, List<String> tickers) {
-        BackfillRangeStats stats = new BackfillRangeStats(tableName, from, to);
-
-        logger.info("Downloading {} tickers", tickers.size());
-        CompletableFuture<List<Split>>[] futures = new CompletableFuture[tickers.size()];
-        for (int i = 0; i < futures.length; i++) {
-            final String ticker = tickers.get(i);
-            futures[i] = CompletableFuture.supplyAsync(() -> {
-                List<Split> splits = PolygonClient.getSplitsForSymbol(ticker);
-                stats.completeSplits(splits);
-                logDownloadProgress(500);
-                return splits;
-            });
-        }
-        return CompletableFuture.allOf(futures).thenApply(v ->
-                Arrays.stream(futures)
-                        .map(CompletableFuture::join)
-                        .flatMap(List::stream)
-        ).thenApply(splits -> {
-            stats.completeDownload();
-            if (!tableName.isEmpty()) {
-                logger.info("Flushing {} candles to {}", stats.numRows, tableName);
-                QuestDBWriter.flushSplits(tableName, splits);
+                if (method == BackfillMethod.aggs) {
+                    QuestDBWriter.flushAggregates(tableName, dateFinancials.map(OHLCV.class::cast));;
+                } else if (method == BackfillMethod.dividends) {
+                    QuestDBWriter.flushDividends(tableName, dateFinancials.map(Dividend.class::cast));
+                } else if (method == BackfillMethod.splits) {
+                    QuestDBWriter.flushSplits(tableName, dateFinancials.map(Split.class::cast));
+                }
             }
             stats.completeFlush();
             return stats;
@@ -300,17 +254,11 @@ public class BackfillRange {
                     sdf.format(stepTo.getTime()));
 
             BackfillRangeStats dayStats = null;
-            if (method == BackfillMethod.aggs) {
-                dayStats = backfillRangeAggs(tableName, stepFrom, stepTo, tickers);
+            if (method == BackfillMethod.aggs || method == BackfillMethod.dividends || method == BackfillMethod.splits) {
+                dayStats = backfillRangeByTicker(tableName, stepFrom, stepTo, tickers, method);
             }
             else if (method == BackfillMethod.grouped) {
                 dayStats = backfillRangeGrouped(tableName, stepFrom, stepTo);
-            }
-            else if (method == BackfillMethod.dividends) {
-                dayStats = backfillRangeDividends(tableName, stepFrom, stepTo, tickers);
-            }
-            else if (method == BackfillMethod.splits) {
-                dayStats = backfillRangeSplits(tableName, stepFrom, stepTo, tickers);
             }
 
             allStats.add(dayStats);

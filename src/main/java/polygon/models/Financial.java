@@ -1,6 +1,6 @@
 package polygon.models;
 
-public class Financial {
+public class Financial extends DateFinancial {
     public String ticker;
     public String period;
     public String calendarDate;
@@ -112,4 +112,14 @@ public class Financial {
     public double taxLiabilities;
     public double tangibleAssetsBookValuePerShare;
     public double workingCapital;
+
+    @Override
+    public String getDateString() {
+        return dateKey;
+    }
+
+    @Override
+    public String getTicker() {
+        return ticker;
+    }
 }

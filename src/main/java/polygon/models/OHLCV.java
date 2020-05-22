@@ -5,7 +5,7 @@ import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.util.Date;
 
-public class OHLCV implements Comparable<OHLCV> {
+public class OHLCV extends DateFinancial {
     @SerializedName("T")
     public String ticker;
     @SerializedName("o")
@@ -37,14 +37,17 @@ public class OHLCV implements Comparable<OHLCV> {
     }
 
     @Override
-    public int compareTo(OHLCV o2) {
-        // Can't return 0 if equal because used in Set
-        if (timeMicros > o2.timeMicros) {
-            return 1;
-        }
-        else if (timeMicros < o2.timeMicros) {
-            return -1;
-        }
-        return 0;
+    public long getDate() {
+        return timeMicros;
+    }
+
+    @Override
+    public String getDateString() {
+        return Instant.ofEpochMilli(timeMicros / 1000).toString().substring(0, 10);
+    }
+
+    @Override
+    public String getTicker() {
+        return ticker;
     }
 }

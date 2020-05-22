@@ -123,7 +123,7 @@ public class QuestDBWriter {
         }
     }
 
-    private static long getMicros(String date) {
+    public static long getMicros(String date) {
         long timeMicros = 0;
         try {
             timeMicros = sdf.parse(date).getTime();

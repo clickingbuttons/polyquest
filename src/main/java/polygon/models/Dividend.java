@@ -1,6 +1,6 @@
 package polygon.models;
 
-public class Dividend implements Comparable<Dividend> {
+public class Dividend extends DateFinancial {
     public String ticker;
     public String exDate;
     public String paymentDate;
@@ -8,7 +8,12 @@ public class Dividend implements Comparable<Dividend> {
     public double amount;
 
     @Override
-    public int compareTo(Dividend other) {
-        return exDate.compareTo(other.exDate);
+    public String getDateString() {
+        return exDate;
+    }
+
+    @Override
+    public String getTicker() {
+        return ticker;
     }
 }

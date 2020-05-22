@@ -1,6 +1,6 @@
 package polygon.models;
 
-public class Split implements Comparable<Split> {
+public class Split extends DateFinancial {
     public String ticker;
     public String exDate;
     public String paymentDate;
@@ -9,7 +9,12 @@ public class Split implements Comparable<Split> {
     public double forfactor;
 
     @Override
-    public int compareTo(Split other) {
-        return exDate.compareTo(other.exDate);
+    public String getDateString() {
+        return exDate;
+    }
+
+    @Override
+    public String getTicker() {
+        return ticker;
     }
 }

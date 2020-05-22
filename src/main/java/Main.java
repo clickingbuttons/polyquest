@@ -23,7 +23,7 @@ public class Main {
     }
 
     private static void backfillIndex() {
-//        backfillAgg1d(BackfillRange.BackfillMethod.grouped, "agg1d");
+        backfillAgg1d(BackfillRange.BackfillMethod.grouped, "agg1d");
         backfillAgg1d(BackfillRange.BackfillMethod.dividends, "dividends");
         backfillAgg1d(BackfillRange.BackfillMethod.splits, "splits");
 //        backfillAgg1d(BackfillRange.BackfillMethod.aggs, "agg1d_aggs");
