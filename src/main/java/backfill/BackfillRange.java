@@ -37,7 +37,7 @@ public class BackfillRange {
                 continue;
             marketDays.add((Calendar) day.clone());
         }
-        logger.info("Downloading {} days", marketDays.size());
+        logger.info("Downloading agg1d candles for {} days", marketDays.size());
         agg1dCounter.set(0);
         CompletableFuture<List<OHLCV>>[] futures = new CompletableFuture[marketDays.size()];
         for (int i = 0; i < futures.length; i++) {
@@ -84,7 +84,7 @@ public class BackfillRange {
     ) {
         BackfillRangeStats stats = new BackfillRangeStats(tableName, from, to);
 
-        logger.info("Downloading {} tickers", tickers.size());
+        logger.info("Downloading {} for {} tickers", method.name(), tickers.size());
         agg1dCounter.set(0);
         CompletableFuture<List<? extends DateFinancial>>[] futures = new CompletableFuture[tickers.size()];
         for (int i = 0; i < futures.length; i++) {
@@ -97,6 +97,8 @@ public class BackfillRange {
                     dateFinancials = PolygonClient.getDividendsForSymbol(ticker);
                 } else if (method == BackfillMethod.splits) {
                     dateFinancials = PolygonClient.getSplitsForSymbol(ticker);
+                } else if (method == BackfillMethod.financials) {
+                    dateFinancials = PolygonClient.getFinancialsForSymbol(ticker);
                 }
                 stats.completeDateFinancials(dateFinancials);
                 logDownloadProgress(500);
@@ -117,6 +119,8 @@ public class BackfillRange {
                     QuestDBWriter.flushDividends(tableName, dateFinancials.map(Dividend.class::cast));
                 } else if (method == BackfillMethod.splits) {
                     QuestDBWriter.flushSplits(tableName, dateFinancials.map(Split.class::cast));
+                } else if (method == BackfillMethod.financials) {
+                    QuestDBWriter.flushFinancials(tableName, dateFinancials.map(Financial.class::cast));
                 }
             }
             stats.completeFlush();
@@ -127,19 +131,6 @@ public class BackfillRange {
     static boolean isValidTicker(String ticker, String tableName) {
         // For Jack don't filter tickers
         return tableName.isEmpty() || ticker.matches("\\A[A-Za-z.-]+\\z") && ticker.length() <= 15;
-    }
-
-    public static void saveTickers(List<Ticker> tickers) {
-        try {
-            FileOutputStream f = new FileOutputStream(new File("tickers.bin"));
-            ObjectOutputStream o = new ObjectOutputStream(f);
-            o.writeObject(tickers);
-
-            o.close();
-            f.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
     }
 
     private static boolean isToday(long epochMilli) {
@@ -172,52 +163,44 @@ public class BackfillRange {
         return null;
     }
 
-    public static List<String> getTickers() {
-        logger.info("Loading tickers from agg1d...");
-        List<String> tickers = QuestDBReader.getTickers();
+    public static List<String> getTickers(String tableName) {
+        List<String> tickers;
 
-//        if (tickers == null) {
-//            logger.info("Downloading tickers...");
-//            tickers = PolygonClient.getTickers();
-//            saveTickers(tickers);
-//        }
-
-        try {
-            PrintWriter out = new PrintWriter("tickers.csv");
-            out.println("ticker");
-            tickers.forEach(out::println);
-            out.close();
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
+        if (tableName.isEmpty()) {
+            File referenceTickers = new File("reference_tickers.csv");
+            // if downloaded today already
+            if (sdf.format(new Date(referenceTickers.lastModified())).equals(sdf.format(new Date()))) {
+                logger.info("Loading tickers from {}...", referenceTickers.toString());
+                tickers = new ArrayList<>(1 << 16);
+                try (BufferedReader br = new BufferedReader(new FileReader(referenceTickers))) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        if (!line.equals("ticker")) {
+                            tickers.add(line);
+                        }
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            } else {
+                logger.info("Downloading reference tickers...");
+                tickers = PolygonClient.getTickers().stream().map(ticker -> ticker.ticker).collect(Collectors.toList());
+                // Cache for next run
+                try {
+                    PrintWriter out = new PrintWriter(referenceTickers);
+                    out.println("ticker");
+                    tickers.forEach(out::println);
+                    out.close();
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+                }
+            }
+        } else {
+            logger.info("Loading tickers from table agg1d...");
+            tickers = QuestDBReader.getTickers();
         }
 
         return tickers;
-    }
-
-    public static void backfill(String type, Calendar from, Calendar to, BackfillMethod method) {
-        // Exchange active from 4:00 - 20:00 (https://polygon.io/blog/frequently-asked-questions/)
-        // Maximum 5 trading days per week, 50000 rows per call
-        int stepSize = type.equals("agg1m") ? PolygonClient.perPage * 7 / ((20 - 4) * 60 * 5) : 1;
-        int stepType = Calendar.DATE;
-        BackfillAllStats allStats = new BackfillAllStats();
-        for (Calendar stepFrom = (Calendar) from.clone(); stepFrom.before(to); stepFrom.add(stepType, stepSize)) {
-            if (stepSize == 1 && !MarketCalendar.isMarketOpen(stepFrom))
-                continue;
-            Calendar stepTo = (Calendar) stepFrom.clone();
-            stepTo.add(stepType, stepSize);
-            if (stepTo.after(to)) {
-                stepTo = (Calendar) to.clone();
-            }
-            logger.info("Backfilling {} from {} to {}",
-                    type,
-                    sdf.format(stepFrom.getTime()),
-                    sdf.format(stepTo.getTime()));
-
-//            BackfillRangeStats dayStats = backfillRangeAggs(type, stepFrom, stepTo);
-//            allStats.add(dayStats);
-//            logger.info(dayStats);
-        }
-        logger.info(allStats);
     }
 
     public static void roundDownToDay(Calendar c) {
@@ -227,16 +210,11 @@ public class BackfillRange {
         c.set(Calendar.MILLISECOND, 0);
     }
 
-    public static BackfillAllStats backfill1d(Calendar from, Calendar to, BackfillMethod method, String tableName) {
+    public static BackfillAllStats backfill(Calendar from, Calendar to, BackfillMethod method, String tableName) {
         // We're always backfilling DAYS, so align from and to to nearest days
         roundDownToDay(from);
         roundDownToDay(to);
         BackfillAllStats allStats = new BackfillAllStats();
-        List<String> tickers = method == BackfillMethod.grouped
-                ? null
-                : getTickers().stream()
-                    .filter(ticker -> isValidTicker(ticker, tableName))
-                    .collect(Collectors.toList());
         // At maximum, 5 / 7 days are trading days
         int stepSize = method == BackfillMethod.grouped ? 1 : PolygonClient.perPage * 7 / 5;
         int stepType = method == BackfillMethod.grouped ? Calendar.YEAR : Calendar.DATE;
@@ -248,17 +226,19 @@ public class BackfillRange {
                 stepTo = (Calendar) to.clone();
             }
 
-            logger.info("Backfilling {} from {} to {}",
-                    tableName,
+            logger.info("Backfilling {} from {} to {} into table {}",
+                    method.name(),
                     sdf.format(stepFrom.getTime()),
-                    sdf.format(stepTo.getTime()));
+                    sdf.format(stepTo.getTime()),
+                    tableName
+            );
 
-            BackfillRangeStats dayStats = null;
-            if (method == BackfillMethod.aggs || method == BackfillMethod.dividends || method == BackfillMethod.splits) {
-                dayStats = backfillRangeByTicker(tableName, stepFrom, stepTo, tickers, method);
-            }
-            else if (method == BackfillMethod.grouped) {
+            BackfillRangeStats dayStats;
+            if (method == BackfillMethod.grouped) {
                 dayStats = backfillRangeGrouped(tableName, stepFrom, stepTo);
+            } else {
+                List<String> tickers = getTickers(tableName);
+                dayStats = backfillRangeByTicker(tableName, stepFrom, stepTo, tickers, method);
             }
 
             allStats.add(dayStats);

@@ -1,11 +1,11 @@
 package polygon.models;
 
 public class Dividend extends DateFinancial {
-    public String ticker;
     public String exDate;
+    public String ticker;
     public String paymentDate;
     public String recordDate;
-    public double amount;
+    public Double amount;
 
     @Override
     public String getDateString() {

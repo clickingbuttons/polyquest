@@ -1,12 +1,12 @@
 package polygon.models;
 
 public class Split extends DateFinancial {
-    public String ticker;
     public String exDate;
+    public String ticker;
     public String paymentDate;
-    public double ratio;
-    public double tofactor;
-    public double forfactor;
+    public Double ratio;
+    public Double tofactor;
+    public Double forfactor;
 
     @Override
     public String getDateString() {

@@ -17,16 +17,17 @@ public class Main {
         from.add(Calendar.DATE, 1);
         Calendar to = new GregorianCalendar();
         to.add(Calendar.DATE, -1);
-        BackfillAllStats aggStats = BackfillRange.backfill1d(from, to, method, tableName);
+        BackfillAllStats aggStats = BackfillRange.backfill(from, to, method, tableName);
         aggStats.writeSymbols(tableName + ".csv");
         aggStats.writeJSON(tableName + ".json");
     }
 
     private static void backfillIndex() {
+//        backfillAgg1d(BackfillRange.BackfillMethod.aggs, "agg1d_aggs");
         backfillAgg1d(BackfillRange.BackfillMethod.grouped, "agg1d");
         backfillAgg1d(BackfillRange.BackfillMethod.dividends, "dividends");
         backfillAgg1d(BackfillRange.BackfillMethod.splits, "splits");
-//        backfillAgg1d(BackfillRange.BackfillMethod.aggs, "agg1d_aggs");
+        backfillAgg1d(BackfillRange.BackfillMethod.financials, "financials");
     }
 
     private static void aggregate() {
@@ -43,7 +44,7 @@ public class Main {
     }
 
     private static void printUsage() {
-        System.out.println("Usage: polyquest [backfill|aggregate] [agg1d|agg1m|trades]");
+        System.out.println("Usage: polyquest [backfill|aggregate] [index|agg1m|trades]");
         System.exit(1);
     }
 
@@ -57,7 +58,6 @@ public class Main {
                 printUsage();
             }
             backfillIndex();
-//            backfill(args[1]);
         }
         else if (args[0].equals("aggregate")) {
             aggregate();
