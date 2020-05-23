@@ -28,7 +28,7 @@ public class QuestDBWriter {
     private final static CairoEngine engine =  new CairoEngine(configuration);
     private final static AllowAllSecurityContextFactory securityContextFactor = new AllowAllSecurityContextFactory();
     private final static CairoSecurityContext cairoSecurityContext = securityContextFactor.getInstance("admin");
-    private static final SqlExecutionContext sqlExecutionContext = new SqlExecutionContextImpl();
+    private static final SqlExecutionContext sqlExecutionContext = new SqlExecutionContextImpl(configuration, null, 1);
     final static long dayMicros = 24 * 60 * 60 * 1000000L;
 
     private static String getPartitionType(String type) {

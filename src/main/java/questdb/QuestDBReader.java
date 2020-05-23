@@ -23,7 +23,7 @@ public class QuestDBReader {
     private final static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
     // Start of Polygon.io data
     public final static Calendar polygonStart = new GregorianCalendar(2004, Calendar.JANUARY, 1);
-    private static final SqlExecutionContext sqlExecutionContext = new SqlExecutionContextImpl();
+    private static final SqlExecutionContext sqlExecutionContext = new SqlExecutionContextImpl(configuration, null, 1);
 
     public static Calendar getLastTimestamp(String tableName) {
         Calendar res = (Calendar) polygonStart.clone();
