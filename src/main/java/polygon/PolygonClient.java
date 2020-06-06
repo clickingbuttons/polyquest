@@ -67,31 +67,38 @@ public class PolygonClient {
         return null;
     }
 
-    public static List<Trade> getTradesForSymbol(String day, String symbol) {
+    public static List<Trade> getTradesForSymbol(Calendar day, String symbol) {
+        final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
         List<Trade> trades = new ArrayList<>();
 
         long offset = 0;
         while(true) {
             String url = String.format("%s/ticks/stocks/trades/%s/%s?apiKey=%s&limit=%d&timestamp=%d",
-                    baseUrl, symbol, day, apiKey, perPage, offset);
+                    baseUrl, symbol, sdf.format(day.getTime()), apiKey, perPage, offset);
             String content = doRequest(url);
             try {
                 TradeResponse r = gson.fromJson(content, TradeResponse.class);
                 trades.addAll(r.results);
+                // Last page
                 if (r.results_count < perPage) {
-                    // Last page
-                    for (Trade t : r.results) {
-                        // Polygon returns UDT nanoseconds for trade data. We save in EST microseconds
-                        t.timeMicros /= 1000;
-                        t.timeMicros -= estOffsetMicros;
-                    }
-                    return trades;
+                    return normalizeTrades(trades, symbol);
                 }
                 offset = trades.get(trades.size() - 1).timeMicros;
             }
             catch (JsonSyntaxException e) {
-                // Happens about once every 5 months that we get incomplete response
-                logger.warn(e);
+                // Occasionally Polygon will do something stupid like give us this for GGE: {
+                //      "T":"X:BTCUSD",
+                //      "v":516831.5165334968,
+                //      "vw":17.1859,
+                //      "o":7821.73,
+                //      "c":17.251,
+                //      "h":8988,
+                //      "l":17.015,
+                //      "t":1305518400000,
+                //      "n":1
+                // }
+                int printUntil = content.contains(",{") ? content.indexOf(",{") : content.length();
+                logger.warn("bad JSON from {}:\n {}\n{}", url, e, content.substring(0, printUntil));
             }
         }
     }
@@ -215,6 +222,18 @@ public class PolygonClient {
         }
     }
 
+    private static List<Trade> normalizeTrades(List<Trade> trades, String ticker) {
+        for (Trade t : trades) {
+            t.ticker = ticker;
+            // Polygon returns UDT nanoseconds for trade data. We save in EST microseconds
+            t.timeMicros += 500;
+            t.timeMicros /= 1000;
+            t.timeMicros -= estOffsetMicros;
+        }
+
+        return trades;
+    }
+
     private static List<OHLCV> normalizeOHLCV(String type, List<OHLCV> aggs, String ticker) {
         for (OHLCV candle : aggs) {
             if (ticker != null) {
@@ -234,12 +253,10 @@ public class PolygonClient {
         return aggs;
     }
 
-    public static List<OHLCV> getAgg1d(Calendar day) {
-        final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-
+    public static List<OHLCV> getAgg1d(String day) {
         while(true) {
             String url = String.format("%s/aggs/grouped/locale/US/market/STOCKS/%s?apiKey=%s",
-                    baseUrl, sdf.format(day.getTime()), apiKey);
+                    baseUrl, day, apiKey);
             String content = doRequest(url);
             try {
                 AggResponse r = gson.fromJson(content, AggResponse.class);

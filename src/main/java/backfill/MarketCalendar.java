@@ -115,6 +115,20 @@ public class MarketCalendar {
             return false;
         }
 
+        // Ronald Reagan death
+        // https://money.cnn.com/2004/06/11/markets/reagan_closings/index.htm
+        Calendar deadAt93 = new GregorianCalendar(2004, Calendar.JUNE, 11);
+        if (date.compareTo(deadAt93) == 0) {
+            return false;
+        }
+
+        // National Day of Mourning for Gerald R. Ford
+        // https://georgewbush-whitehouse.archives.gov/news/releases/2006/12/20061228-2.html
+        Calendar mourning = new GregorianCalendar(2007, Calendar.JANUARY, 2);
+        if (date.compareTo(mourning) == 0) {
+            return false;
+        }
+
         // Hurricane Sandy
         Calendar hurricaneSandy = new GregorianCalendar(2012, Calendar.OCTOBER, 29);
         if (date.compareTo(hurricaneSandy) == 0) {
@@ -127,7 +141,7 @@ public class MarketCalendar {
         }
 
         // George H.W. Bush death
-        Calendar deadAt94 = new GregorianCalendar(2018, Calendar.DECEMBER, 05);
+        Calendar deadAt94 = new GregorianCalendar(2018, Calendar.DECEMBER, 5);
         if (date.compareTo(deadAt94) == 0) {
             return false;
         }

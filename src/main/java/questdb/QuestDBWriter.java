@@ -1,21 +1,18 @@
 package questdb;
 
 import io.questdb.cairo.*;
-import io.questdb.cairo.security.AllowAllCairoSecurityContext;
 import io.questdb.cairo.security.AllowAllSecurityContextFactory;
 import io.questdb.griffin.SqlCompiler;
 import io.questdb.griffin.SqlException;
 import io.questdb.griffin.SqlExecutionContext;
 import io.questdb.griffin.SqlExecutionContextImpl;
-import io.questdb.griffin.engine.functions.bind.BindVariableService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import polygon.models.*;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.*;
-import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -81,18 +78,17 @@ public class QuestDBWriter {
             "    conditions INT, \n" +
             "    exchange BYTE \n" +
             ") TIMESTAMP(ts) PARTITION BY DAY";
-    public static void flushTrades(String tableName, Collection<Trade> trades) {
+    public static void flushTrades(String tableName, Stream<Trade> trades) {
         try (TableWriter writer = engine.getWriter(cairoSecurityContext, tableName)) {
-            for (Trade t : trades) {
-                long microSeconds = t.getTimeMicros();
-                TableWriter.Row row = writer.newRow(microSeconds);
-                row.putSym(0, t.ticker);
-                row.putDouble(1, t.price);
-                row.putInt(2, t.size);
-                row.putInt(3, t.encodeConditions());
-                row.putByte(4, t.encodeExchange());
+            trades.sorted().forEach(t -> {
+                TableWriter.Row row = writer.newRow(t.timeMicros);
+                row.putSym(1, t.ticker);
+                row.putDouble(2, t.price);
+                row.putInt(3, t.size);
+                row.putInt(4, t.encodeConditions());
+                row.putByte(5, t.encodeExchange());
                 row.append();
-            }
+            });
             writer.commit();
         }
     }
@@ -109,7 +105,7 @@ public class QuestDBWriter {
             ") TIMESTAMP(ts) PARTITION BY %s";
     public static void flushAggregates(String tableName, Stream<OHLCV> aggregates) {
         try (TableWriter writer = engine.getWriter(cairoSecurityContext, tableName)) {
-            aggregates.sorted().forEach(agg -> {
+            aggregates.sorted().collect(Collectors.toList()).forEach(agg -> {
                 TableWriter.Row row = writer.newRow(agg.timeMicros);
                 row.putSym(1, agg.ticker);
                 row.putDouble(2, agg.open);

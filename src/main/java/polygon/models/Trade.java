@@ -6,7 +6,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Trade implements Comparable<Trade> {
+public class Trade extends DateFinancial  {
     public String ticker;
     // EST microsecond timestamp
     @SerializedName("t")
@@ -81,10 +81,6 @@ public class Trade implements Comparable<Trade> {
         tape = (short) (encoded >> 6);
     }
 
-    public long getTimeMicros() {
-        return (timeMicros + 500) / 1000;
-    }
-
     public String toString() {
         return String.format("%d (%s) - %d @ %.3f",
                 timeMicros,
@@ -95,11 +91,17 @@ public class Trade implements Comparable<Trade> {
     }
 
     @Override
-    public int compareTo(Trade t2) {
-        // Can't return 0 if equal because used in Set
-        if (t2.timeMicros >= timeMicros) {
-            return -1;
-        }
-        return 1;
+    public long getDate() {
+        return timeMicros;
+    }
+
+    @Override
+    public String getDateString() {
+        return Instant.ofEpochMilli(timeMicros / 1000).toString().substring(0, 10);
+    }
+
+    @Override
+    public String getTicker() {
+        return ticker;
     }
 }

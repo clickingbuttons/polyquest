@@ -25,9 +25,9 @@ public class Main {
     private static void backfillIndex() {
 //        backfillAgg1d(BackfillRange.BackfillMethod.aggs, "agg1d_aggs");
         backfillAgg1d(BackfillRange.BackfillMethod.grouped, "agg1d");
-        backfillAgg1d(BackfillRange.BackfillMethod.dividends, "dividends");
-        backfillAgg1d(BackfillRange.BackfillMethod.splits, "splits");
-        backfillAgg1d(BackfillRange.BackfillMethod.financials, "financials");
+//        backfillAgg1d(BackfillRange.BackfillMethod.dividends, "dividends");
+//        backfillAgg1d(BackfillRange.BackfillMethod.splits, "splits");
+//        backfillAgg1d(BackfillRange.BackfillMethod.financials, "financials");
     }
 
     private static void aggregate() {
@@ -57,7 +57,12 @@ public class Main {
             if (args.length < 2) {
                 printUsage();
             }
-            backfillIndex();
+            else if (args[1].equals("index")) {
+                backfillIndex();
+            }
+            else if (args[1].equals("trades")) {
+                backfillAgg1d(BackfillRange.BackfillMethod.trades, "trades");
+            }
         }
         else if (args[0].equals("aggregate")) {
             aggregate();

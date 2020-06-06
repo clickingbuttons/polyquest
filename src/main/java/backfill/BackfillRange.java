@@ -17,91 +17,81 @@ import java.util.stream.Collectors;
 public class BackfillRange {
     final static Logger logger = LogManager.getLogger(BackfillRange.class);
     final static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-    final static AtomicInteger agg1dCounter = new AtomicInteger(0);
+    final static AtomicInteger downloadCounter = new AtomicInteger(0);
 
     public enum BackfillMethod {
         grouped,
         aggs,
         dividends,
         splits,
-        financials
+        financials,
+        trades
     }
 
-    @SuppressWarnings("unchecked")
-    static BackfillRangeStats backfillRangeGrouped(String tableName, Calendar from, Calendar to) {
-        BackfillRangeStats stats = new BackfillRangeStats(tableName, from, to);
-
-        List<Calendar> marketDays = new ArrayList<>();
+    static List<String> getMarketDays(Calendar from, Calendar to) {
+        List<String> marketDays = new ArrayList<>();
         for (Calendar day = (Calendar) from.clone(); day.before(to) || day.equals(to); day.add(Calendar.DATE, 1)) {
             if (!MarketCalendar.isMarketOpen(day))
                 continue;
-            marketDays.add((Calendar) day.clone());
-        }
-        logger.info("Downloading agg1d candles for {} days", marketDays.size());
-        agg1dCounter.set(0);
-        CompletableFuture<List<OHLCV>>[] futures = new CompletableFuture[marketDays.size()];
-        for (int i = 0; i < futures.length; i++) {
-            final Calendar marketDay = marketDays.get(i);
-            futures[i] = CompletableFuture.supplyAsync(() -> {
-                List<OHLCV> aggs = PolygonClient.getAgg1d(marketDay);
-                aggs.removeIf(agg -> !isValidTicker(agg.ticker, tableName));
-                stats.completeDateFinancials(aggs);
-                logDownloadProgress(50);
-                return aggs;
-            });
+            marketDays.add(sdf.format(day.getTime()));
         }
 
-        return CompletableFuture.allOf(futures).thenApply(v ->
-                Arrays.stream(futures)
-                    .map(CompletableFuture::join)
-                    .flatMap(List::stream)
-                    .filter(agg -> isValidTicker(agg.ticker, tableName))
-            ).thenApply(aggs -> {
-                stats.completeDownload();
-                if (!tableName.isEmpty()) {
-                    logger.info("Flushing {} candles to {}", stats.numRows, tableName);
-                    QuestDBWriter.flushAggregates(tableName, aggs);
-                }
-                stats.completeFlush();
-                return stats;
-            }).join();
+        return marketDays;
     }
 
-    static void logDownloadProgress(int mod) {
-        int i = agg1dCounter.incrementAndGet();
+    static void logDownloadProgress(int mod, int size) {
+        int i = downloadCounter.incrementAndGet();
         if (i % mod == 0) {
-            logger.info(i);
+            logger.info("{} / {}", i, size);
         }
     }
 
     @SuppressWarnings("unchecked")
-    static BackfillRangeStats backfillRangeByTicker(
+    static BackfillRangeStats backfillRangeByTickerOrDay(
             String tableName,
             Calendar from,
             Calendar to,
-            List<String> tickers,
+            List<String> tickersOrDays,
             BackfillMethod method
     ) {
         BackfillRangeStats stats = new BackfillRangeStats(tableName, from, to);
 
-        logger.info("Downloading {} for {} tickers", method.name(), tickers.size());
-        agg1dCounter.set(0);
-        CompletableFuture<List<? extends DateFinancial>>[] futures = new CompletableFuture[tickers.size()];
+        downloadCounter.set(0);
+        CompletableFuture<List<? extends DateFinancial>>[] futures = new CompletableFuture[tickersOrDays.size()];
+
         for (int i = 0; i < futures.length; i++) {
-            final String ticker = tickers.get(i);
+            final String tickerOrDay = tickersOrDays.get(i);
             futures[i] = CompletableFuture.supplyAsync(() -> {
                 List<? extends DateFinancial> dateFinancials = null;
-                if (method == BackfillMethod.aggs) {
-                    dateFinancials = PolygonClient.getAggsForSymbol(from, to, "day", ticker);
-                } else if (method == BackfillMethod.dividends) {
-                    dateFinancials = PolygonClient.getDividendsForSymbol(ticker);
-                } else if (method == BackfillMethod.splits) {
-                    dateFinancials = PolygonClient.getSplitsForSymbol(ticker);
-                } else if (method == BackfillMethod.financials) {
-                    dateFinancials = PolygonClient.getFinancialsForSymbol(ticker);
+                switch (method) {
+                    case grouped:
+                        dateFinancials = PolygonClient.getAgg1d(tickerOrDay);
+                        // For Jack don't filter tickers
+                        if (!tableName.isEmpty()) {
+                            dateFinancials.removeIf(agg -> !isValidTicker(agg.getTicker()));
+                        }
+                        if (dateFinancials.size() < 3000) {
+                            logger.error("Holiday? {}", tickerOrDay);
+                        }
+                        break;
+                    case aggs:
+                        dateFinancials = PolygonClient.getAggsForSymbol(from, to, "day", tickerOrDay);
+                        break;
+                    case dividends:
+                        dateFinancials = PolygonClient.getDividendsForSymbol(tickerOrDay);
+                        break;
+                    case splits:
+                        dateFinancials = PolygonClient.getSplitsForSymbol(tickerOrDay);
+                        break;
+                    case financials:
+                        dateFinancials = PolygonClient.getFinancialsForSymbol(tickerOrDay);
+                        break;
+                    case trades:
+                        dateFinancials = PolygonClient.getTradesForSymbol(from, tickerOrDay);
+                        break;
                 }
                 stats.completeDateFinancials(dateFinancials);
-                logDownloadProgress(500);
+                logDownloadProgress(method == BackfillMethod.grouped ? 50 : 500, futures.length);
                 return dateFinancials;
             });
         }
@@ -112,15 +102,26 @@ public class BackfillRange {
         ).thenApply(dateFinancials -> {
             stats.completeDownload();
             if (!tableName.isEmpty()) {
-                logger.info("Flushing {} candles to {}", stats.numRows, tableName);
-                if (method == BackfillMethod.aggs) {
-                    QuestDBWriter.flushAggregates(tableName, dateFinancials.map(OHLCV.class::cast));;
-                } else if (method == BackfillMethod.dividends) {
-                    QuestDBWriter.flushDividends(tableName, dateFinancials.map(Dividend.class::cast));
-                } else if (method == BackfillMethod.splits) {
-                    QuestDBWriter.flushSplits(tableName, dateFinancials.map(Split.class::cast));
-                } else if (method == BackfillMethod.financials) {
-                    QuestDBWriter.flushFinancials(tableName, dateFinancials.map(Financial.class::cast));
+                logger.info("Flushing {} {} to {}", stats.numRows, method.name(), tableName);
+                switch (method) {
+                    case grouped:
+                        QuestDBWriter.flushAggregates(tableName, dateFinancials.map(OHLCV.class::cast));;
+                        break;
+                    case aggs:
+                        QuestDBWriter.flushAggregates(tableName, dateFinancials.map(OHLCV.class::cast));;
+                        break;
+                    case dividends:
+                        QuestDBWriter.flushDividends(tableName, dateFinancials.map(Dividend.class::cast));
+                        break;
+                    case splits:
+                        QuestDBWriter.flushSplits(tableName, dateFinancials.map(Split.class::cast));
+                        break;
+                    case financials:
+                        QuestDBWriter.flushFinancials(tableName, dateFinancials.map(Financial.class::cast));
+                        break;
+                    case trades:
+                        QuestDBWriter.flushTrades(tableName, dateFinancials.map(Trade.class::cast));
+                        break;
                 }
             }
             stats.completeFlush();
@@ -128,9 +129,8 @@ public class BackfillRange {
         }).join();
     }
 
-    static boolean isValidTicker(String ticker, String tableName) {
-        // For Jack don't filter tickers
-        return tableName.isEmpty() || ticker.matches("\\A[A-Za-z.-]+\\z") && ticker.length() <= 15;
+    static boolean isValidTicker(String ticker) {
+        return ticker.matches("\\A[A-Za-z.-]+\\z") && ticker.length() <= 15;
     }
 
     private static boolean isToday(long epochMilli) {
@@ -210,37 +210,47 @@ public class BackfillRange {
         c.set(Calendar.MILLISECOND, 0);
     }
 
-    public static BackfillAllStats backfill(Calendar from, Calendar to, BackfillMethod method, String tableName) {
+    public static BackfillAllStats backfill(Calendar rangeFrom, Calendar rangeTo, BackfillMethod method, String tableName) {
         // We're always backfilling DAYS, so align from and to to nearest days
-        roundDownToDay(from);
-        roundDownToDay(to);
+        roundDownToDay(rangeFrom);
+        roundDownToDay(rangeTo);
         BackfillAllStats allStats = new BackfillAllStats();
         // At maximum, 5 / 7 days are trading days
-        int stepSize = method == BackfillMethod.grouped ? 1 : PolygonClient.perPage * 7 / 5;
+        int stepSize = method == BackfillMethod.grouped || method == BackfillMethod.trades ? 1 : PolygonClient.perPage * 7 / 5;
         int stepType = method == BackfillMethod.grouped ? Calendar.YEAR : Calendar.DATE;
 
-        for (Calendar stepFrom = (Calendar) from.clone(); stepFrom.before(to); stepFrom.add(stepType, stepSize)) {
-            Calendar stepTo = (Calendar) stepFrom.clone();
-            stepTo.add(stepType, stepSize);
-            if (stepTo.after(to)) {
-                stepTo = (Calendar) to.clone();
+        for (Calendar from = (Calendar) rangeFrom.clone(); from.before(rangeTo); from.add(stepType, stepSize)) {
+            Calendar to = (Calendar) from.clone();
+            to.add(stepType, stepSize);
+            if (to.after(rangeTo)) {
+                to = (Calendar) rangeTo.clone();
             }
 
+            if (method == BackfillMethod.trades && !MarketCalendar.isMarketOpen(from)) {
+                continue;
+            }
             logger.info("Backfilling {} from {} to {} into table {}",
                     method.name(),
-                    sdf.format(stepFrom.getTime()),
-                    sdf.format(stepTo.getTime()),
+                    sdf.format(from.getTime()),
+                    sdf.format(to.getTime()),
                     tableName
             );
 
-            BackfillRangeStats dayStats;
+            List<String> tickersOrDays;
             if (method == BackfillMethod.grouped) {
-                dayStats = backfillRangeGrouped(tableName, stepFrom, stepTo);
-            } else {
-                List<String> tickers = getTickers(tableName);
-                dayStats = backfillRangeByTicker(tableName, stepFrom, stepTo, tickers, method);
+                tickersOrDays = getMarketDays(from, to);
+                logger.info("Downloading agg1d candles for {} days", tickersOrDays.size());
+            }
+            else if (method == BackfillMethod.trades) {
+                tickersOrDays = QuestDBReader.getTickersOnDay(sdf.format(from.getTime()));
+                logger.info("Downloading {} for {} tickers", method.name(), tickersOrDays.size());
+            }
+            else {
+                tickersOrDays = getTickers(tableName);
+                logger.info("Downloading {} for {} tickers", method.name(), tickersOrDays.size());
             }
 
+            BackfillRangeStats dayStats = backfillRangeByTickerOrDay(tableName, from, to, tickersOrDays, method);
             allStats.add(dayStats);
             logger.info(dayStats);
         }

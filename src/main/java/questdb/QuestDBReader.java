@@ -86,11 +86,11 @@ public class QuestDBReader {
         return res;
     }
 
-    public static List<String> getTickers() {
+    public static List<String> getTickers(String whereClause) {
         List<String> res = new ArrayList<>();
         CairoEngine engine = new CairoEngine(configuration);
         SqlCompiler compiler = new SqlCompiler(engine);
-        String query = "select distinct sym from agg1d";
+        String query = String.format("select distinct sym from agg1d %s", whereClause);
         try (RecordCursor cursor = compiler.compile(query, sqlExecutionContext).getRecordCursorFactory().getCursor(sqlExecutionContext)) {
             Record record = cursor.getRecord();
             while (cursor.hasNext()) {
@@ -102,6 +102,14 @@ public class QuestDBReader {
         }
 
         return res;
+    }
+
+    public static List<String> getTickers() {
+        return getTickers("");
+    }
+
+    public static List<String> getTickersOnDay(String day) {
+        return getTickers(String.format("where ts='%sT00:00:00.000Z'", day));
     }
 
     public static void close() {
